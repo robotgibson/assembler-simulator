@@ -343,9 +343,11 @@
 }
 
 .panel-ctrls span, .panel-ctrls a {
+    display: inline-block;
+    width: 1.35em;
+    text-align: center;
     color: #777;
     cursor: pointer;
-    padding: 0 4px;
     text-decoration: none;
 }
 
@@ -436,4 +438,28 @@
     background-color: #F2DEDE !important;
     color: #A94442;
     font-weight: bold;
+}
+
+.flag-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    margin-bottom: 10px;
+}
+
+.flag-box {
+    border: 1px solid #DDD;
+    margin-right: -1px;
+    text-align: center;
+}
+
+.flag-hdr {
+    font-weight: bold;
+    padding: 3px 4px;
+    border-bottom: 2px solid #DDD;
+    background-color: #FFF;
+}
+
+.flag-val {
+    padding: 3px 4px;
+    background-color: #FFF;
 }
