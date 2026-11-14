@@ -1663,7 +1663,8 @@ var app = angular.module('ASMSimulator', []);
                 var clean = stripComment(lines.at(li)).trim();
                 if (!clean) { continue; }
                 var colon = clean.indexOf(':');
-                if (colon !== -1 && clean.indexOf('"') === -1 && clean.indexOf("'") === -1) {
+                var q1 = clean.indexOf('"'), q2 = clean.indexOf("'");
+                if (colon !== -1 && (q1 === -1 || colon < q1) && (q2 === -1 || colon < q2)) {
                     var lbl = clean.slice(0, colon).trim().toLowerCase();
                     if (!/^[a-z_.][a-z0-9_.]*$/.test(lbl)) { throw "Invalid label '" + lbl + "' on line " + (li + 1); }
                     if (labels.hasOwnProperty(lbl)) { throw "Duplicate label '" + lbl + "' on line " + (li + 1); }
@@ -1869,24 +1870,144 @@ var app = angular.module('ASMSimulator', []);
     return self;
 }]);
 
-app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', 'cpu', 'cpu8080', 'memory', 'input', 'assembler', 'assembler8080', function ($document, $scope, $timeout, $http, opcodes, cpu, cpu8080, memory, input, assembler, assembler8080) {
+;app.service('disasm', ['opcodes', function (opcodes) {
+    var opNames = {};
+    angular.forEach(opcodes, function (v, k) { opNames[v] = k; });
+    var regNames = ['A', 'B', 'C', 'D', 'SP'];
+    function hex2(v) { return ('0' + (v & 0xFF).toString(16).toUpperCase()).slice(-2); }
+    function hex4(v) { return ('000' + (v & 0xFFFF).toString(16).toUpperCase()).slice(-4); }
+
+    var r8080 = ['B', 'C', 'D', 'E', 'H', 'L', 'M', 'A'];
+    var rp8080 = ['B', 'D', 'H', 'SP'];
+    var push8080 = ['B', 'D', 'H', 'PSW'];
+    var alu8080 = ['ADD', 'ADC', 'SUB', 'SBB', 'ANA', 'XRA', 'ORA', 'CMP'];
+    var imm8080 = ['ADI', 'ACI', 'SUI', 'SBI', 'ANI', 'XRI', 'ORI', 'CPI'];
+    var cc8080 = ['NZ', 'Z', 'NC', 'C', 'PO', 'PE', 'P', 'M'];
+
+    function decode8080(mem, addr) {
+        var op = mem.at(addr), b1 = mem.at((addr + 1) & 0xFF), b2 = mem.at((addr + 2) & 0xFF);
+        var w = (b2 << 8) | b1, wHex = hex4(w);
+        if (op === 0x00) { return { len: 1, text: 'NOP' }; }
+        if (op === 0x76) { return { len: 1, text: 'HLT' }; }
+        if ((op & 0xC0) === 0x40) { return { len: 1, text: 'MOV ' + r8080.at((op >> 3) & 7) + ', ' + r8080.at(op & 7) }; }
+        if ((op & 0xC0) === 0x80) { return { len: 1, text: alu8080.at((op >> 3) & 7) + ' ' + r8080.at(op & 7) }; }
+        if ((op & 0xC7) === 0x06) { return { len: 2, text: 'MVI ' + r8080.at((op >> 3) & 7) + ', 0x' + hex2(b1) }; }
+        if ((op & 0xC7) === 0x04) { return { len: 1, text: 'INR ' + r8080.at((op >> 3) & 7) }; }
+        if ((op & 0xC7) === 0x05) { return { len: 1, text: 'DCR ' + r8080.at((op >> 3) & 7) }; }
+        if ((op & 0xCF) === 0x01) { return { len: 3, text: 'LXI ' + rp8080.at((op >> 4) & 3) + ', 0x' + wHex }; }
+        if ((op & 0xCF) === 0x03) { return { len: 1, text: 'INX ' + rp8080.at((op >> 4) & 3) }; }
+        if ((op & 0xCF) === 0x0B) { return { len: 1, text: 'DCX ' + rp8080.at((op >> 4) & 3) }; }
+        if ((op & 0xCF) === 0x09) { return { len: 1, text: 'DAD ' + rp8080.at((op >> 4) & 3) }; }
+        if (op === 0x02) { return { len: 1, text: 'STAX B' }; }
+        if (op === 0x12) { return { len: 1, text: 'STAX D' }; }
+        if (op === 0x0A) { return { len: 1, text: 'LDAX B' }; }
+        if (op === 0x1A) { return { len: 1, text: 'LDAX D' }; }
+        if (op === 0x22) { return { len: 3, text: 'SHLD 0x' + wHex }; }
+        if (op === 0x2A) { return { len: 3, text: 'LHLD 0x' + wHex }; }
+        if (op === 0x32) { return { len: 3, text: 'STA 0x' + wHex }; }
+        if (op === 0x3A) { return { len: 3, text: 'LDA 0x' + wHex }; }
+        if (op === 0x07) { return { len: 1, text: 'RLC' }; }
+        if (op === 0x0F) { return { len: 1, text: 'RRC' }; }
+        if (op === 0x17) { return { len: 1, text: 'RAL' }; }
+        if (op === 0x1F) { return { len: 1, text: 'RAR' }; }
+        if (op === 0x2F) { return { len: 1, text: 'CMA' }; }
+        if (op === 0x37) { return { len: 1, text: 'STC' }; }
+        if (op === 0x3F) { return { len: 1, text: 'CMC' }; }
+        if ((op & 0xC7) === 0xC6) { return { len: 2, text: imm8080.at((op >> 3) & 7) + ' 0x' + hex2(b1) }; }
+        if (op === 0xC3) { return { len: 3, text: 'JMP 0x' + wHex }; }
+        if ((op & 0xC7) === 0xC2) { return { len: 3, text: 'J' + cc8080.at((op >> 3) & 7) + ' 0x' + wHex }; }
+        if (op === 0xCD) { return { len: 3, text: 'CALL 0x' + wHex }; }
+        if ((op & 0xC7) === 0xC4) { return { len: 3, text: 'C' + cc8080.at((op >> 3) & 7) + ' 0x' + wHex }; }
+        if (op === 0xC9) { return { len: 1, text: 'RET' }; }
+        if ((op & 0xC7) === 0xC0) { return { len: 1, text: 'R' + cc8080.at((op >> 3) & 7) }; }
+        if ((op & 0xCF) === 0xC5) { return { len: 1, text: 'PUSH ' + push8080.at((op >> 4) & 3) }; }
+        if ((op & 0xCF) === 0xC1) { return { len: 1, text: 'POP ' + push8080.at((op >> 4) & 3) }; }
+        if (op === 0xEB) { return { len: 1, text: 'XCHG' }; }
+        if (op === 0xE3) { return { len: 1, text: 'XTHL' }; }
+        if (op === 0xE9) { return { len: 1, text: 'PCHL' }; }
+        if (op === 0xF9) { return { len: 1, text: 'SPHL' }; }
+        return { len: 1, text: 'DB 0x' + hex2(op) };
+    }
+
+    function decode8bit(mem, addr) {
+        var op = mem.at(addr), b1 = mem.at((addr + 1) & 0xFF), b2 = mem.at((addr + 2) & 0xFF);
+        var name = opNames.hasOwnProperty(op) ? opNames[op] : null;
+        if (!name) { return { len: 1, text: 'DB 0x' + hex2(op) }; }
+        var parts = name.split('_');
+        var mnem = parts.at(0);
+        if (op === 0 || op === 98 || mnem === 'RET') { return { len: 1, text: mnem }; }
+        if (parts.length === 2) {
+            var kind = parts.at(1), arg = '';
+            if (kind === 'REG') { arg = regNames.at(b1) || ('R' + b1); }
+            else if (kind === 'REGADDRESS') { arg = '[' + (regNames.at(b1) || b1) + ']'; }
+            else if (kind === 'ADDRESS') { arg = '[0x' + hex2(b1) + ']'; }
+            else { arg = '0x' + hex2(b1); }
+            if (mnem.charAt(0) === 'J' || mnem === 'CALL') { arg = '0x' + hex2(b1); }
+            return { len: 2, text: mnem + ' ' + arg };
+        }
+        var p1 = regNames.at(b1) || ('0x' + hex2(b1));
+        var p2 = regNames.at(b2) || ('0x' + hex2(b2));
+        if (name.indexOf('REGADDRESS_TO') !== -1 || name.indexOf('REGADDRESS_FROM') !== -1 || name.indexOf('REGADDRESS_WITH') !== -1) { p2 = '[' + p2 + ']'; }
+        else if (name.indexOf('ADDRESS_TO') !== -1 || name.indexOf('ADDRESS_FROM') !== -1 || name.indexOf('ADDRESS_WITH') !== -1) { p2 = '[0x' + hex2(b2) + ']'; }
+        else if (name.indexOf('NUMBER') !== -1) { p2 = '0x' + hex2(b2); }
+        if (name.indexOf('TO_REGADDRESS') !== -1) { p1 = '[' + p1 + ']'; }
+        else if (name.indexOf('TO_ADDRESS') !== -1) { p1 = '[0x' + hex2(b1) + ']'; }
+        return { len: 3, text: mnem + ' ' + p1 + ', ' + p2 };
+    }
+
+    return {
+        build: function (mem, mapping, mode) {
+            if (!mapping) { return []; }
+            var rows = [], addr = 0;
+            while (addr < 256) {
+                if (mapping.hasOwnProperty(addr)) {
+                    var dec = (mode === '8080') ? decode8080(mem, addr) : decode8bit(mem, addr);
+                    var bytes = [];
+                    for (var i = 0; i < dec.len && (addr + i) < 256; i++) { bytes.push(hex2(mem.at(addr + i))); }
+                    rows.push({ addr: addr, addrHex: hex4(addr), bytes: bytes.join(' '), text: dec.text });
+                    addr += dec.len;
+                } else {
+                    addr += 1;
+                }
+            }
+            return rows;
+        }
+    };
+}]);
+
+app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', 'disasm', 'cpu', 'cpu8080', 'memory', 'input', 'assembler', 'assembler8080', function ($document, $scope, $timeout, $http, opcodes, disasm, cpu, cpu8080, memory, input, assembler, assembler8080) {
     $scope.displayInstr = false;
     $scope.memory = memory;
     $scope.cpu = cpu;
     $scope.input = input;
     $scope.cpu8080 = cpu8080;
     $scope.cpuMode = '8bit';
+    $scope.showAscii = true;
+    $scope.ramRows = [];
+    for (var r = 0; r < 16; r++) { $scope.ramRows.push(r); }
+    $scope.disassembly = [];
+    $scope.refreshDisasm = function () {
+        $scope.disassembly = disasm.build(memory.data, $scope.mapping, $scope.cpuMode);
+    };
+    $scope.getAsciiChar = function (b) {
+        return (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.';
+    };
     var defaultCode8 = "; Simple example\n; Writes Hello World to the output\n\n\tJMP start\nhello: DB \"Hello World!\" ; Variable\n       DB 0\t; String terminator\n\nstart:\n\tMOV C, hello    ; Point to var \n\tMOV D, 232\t; Point to output\n\tCALL print\n        HLT             ; Stop execution\n\nprint:\t\t\t; print(C:*from, D:*to)\n\tPUSH A\n\tPUSH B\n\tMOV B, 0\n.loop:\n\tMOV A, [C]\t; Get char from var\n\tMOV [D], A\t; Write to output\n\tINC C\n\tINC D  \n\tCMP B, [C]\t; Check if end\n\tJNZ .loop\t; jump if not\n\n\tPOP B\n\tPOP A\n\tRET";
     var defaultCode8080 = "; Intel 8080 Hello World example\n; Writes \"Hello World!\" to memory-mapped output (232 / 0xE8)\n\n        JMP start\nhello:  DB \"Hello World!\"\n        DB 0\n\nstart:\n        LXI H, hello    ; HL points to source string\n        LXI D, 232      ; DE points to console output (0xE8)\n        CALL print\n        HLT\n\nprint:\n        MOV A, M        ; Load byte at [HL] into A\n        CPI 0           ; Check for null terminator\n        RZ              ; Return if zero\n        STAX D          ; Store A at [DE]\n        INX H           ; HL++\n        INX D           ; DE++\n        JMP print";
     $scope.setCpuMode = function (mode) {
         if ($scope.cpuMode === mode) { return; }
         $scope.stop();
         $scope.cpuMode = mode;
+        $scope.selectedExample = '';
         $scope.code = (mode === '8080') ? defaultCode8080 : defaultCode8;
         $scope.reset();
     };
     $scope.error = '';
     $scope.displayHex = true;
+    $scope.showAscii = true;
+    $scope.disasmRows = [];
+    $scope.getActiveIp = function () { return ($scope.cpuMode === '8080') ? cpu8080.ip : cpu.ip; };
+    $scope.getAsciiChar = function (v) { return (v >= 32 && v <= 126) ? String.fromCharCode(v) : '.'; };
     $scope.displayA = false;
     $scope.displayB = false;
     $scope.displayC = false;
@@ -1969,12 +2090,12 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     var opcodeNames = {};
     angular.forEach(opcodes, function (v, k) { opcodeNames[v] = k; });
     $scope.examples = [
-        { name: 'Hello World (8-bit)', file: 'examples/hello-world.asm', mode: '8bit' },
-        { name: 'Hello World (8080)', file: 'examples/hello-world-8080.asm', mode: '8080' },
-        { name: 'Switches & 16-bit Math', file: 'examples/switches-and-16bit-math.asm' },
-        { name: 'Simple Example 1', file: 'examples/simple-example-1.asm' },
-        { name: 'Simple Example 2', file: 'examples/simple-example-2.asm' },
-        { name: 'Simple Example 3', file: 'examples/simple-example-3.asm' }
+        { name: 'Hello World', file: 'examples/hello-world.asm', mode: '8bit' },
+        { name: 'Switches & 16-bit Math', file: 'examples/switches-and-16bit-math.asm', mode: '8bit' },
+        { name: 'Simple Example 1', file: 'examples/simple-example-1.asm', mode: '8bit' },
+        { name: 'Simple Example 2', file: 'examples/simple-example-2.asm', mode: '8bit' },
+        { name: 'Simple Example 3', file: 'examples/simple-example-3.asm', mode: '8bit' },
+        { name: 'Hello World (8080)', file: 'examples/hello-world-8080.asm', mode: '8080' }
     ];
     $scope.selectedExample = '';
     $scope.loadExample = function (file) {
@@ -2013,6 +2134,8 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
         memory.reset();
         $scope.error = '';
         $scope.selectedLine = -1;
+        $scope.disassembly = [];
+        $scope.disasmRows = [];
         $scope.changed = { gprA: false, gprB: false, gprC: false, gprD: false, sp: false, zero: false, carry: false, fault: false };
     };
 
@@ -2041,6 +2164,8 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
                 $scope.changed = { gprA: cpu.gpr.at(0)!==pG.at(0), gprB: cpu.gpr.at(1)!==pG.at(1), gprC: cpu.gpr.at(2)!==pG.at(2), gprD: cpu.gpr.at(3)!==pG.at(3), sp: cpu.sp!==pS, zero: cpu.zero!==pZ, carry: cpu.carry!==pC, fault: cpu.fault!==pF };
             }
 
+            $scope.disasmRows = disasm.build(memory.data, $scope.mapping, $scope.cpuMode);
+            $scope.refreshDisasm();
             // Mark in code
             if (activeCpu.ip in $scope.mapping) {
                 $scope.selectedLine = $scope.mapping[activeCpu.ip];
@@ -2110,12 +2235,16 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
             for (var i = 0, l = binary.length; i < l; i++) {
                 memory.data[i] = binary[i];
             }
+            $scope.refreshDisasm();
+            $scope.disasmRows = disasm.build(memory.data, $scope.mapping, $scope.cpuMode);
         } catch (e) {
-            if (e.line !== undefined) {
+            if (typeof e === 'string') {
+                $scope.error = e;
+            } else if (e.line !== undefined) {
                 $scope.error = e.line + " | " + e.error;
                 $scope.selectedLine = e.line;
             } else {
-                $scope.error = e.error;
+                $scope.error = e.error || String(e);
             }
         }
     };

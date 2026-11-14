@@ -76,7 +76,8 @@
                 var clean = stripComment(lines.at(li)).trim();
                 if (!clean) { continue; }
                 var colon = clean.indexOf(':');
-                if (colon !== -1 && clean.indexOf('"') === -1 && clean.indexOf("'") === -1) {
+                var q1 = clean.indexOf('"'), q2 = clean.indexOf("'");
+                if (colon !== -1 && (q1 === -1 || colon < q1) && (q2 === -1 || colon < q2)) {
                     var lbl = clean.slice(0, colon).trim().toLowerCase();
                     if (!/^[a-z_.][a-z0-9_.]*$/.test(lbl)) { throw "Invalid label '" + lbl + "' on line " + (li + 1); }
                     if (labels.hasOwnProperty(lbl)) { throw "Duplicate label '" + lbl + "' on line " + (li + 1); }
