@@ -44,16 +44,22 @@
     background-color: #F8DCB4;
 }
 
+.ram-grid {
+    display: grid;
+    grid-template-columns: repeat(17, 1.8em);
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.ram-grid .memory-block {
+    float: none;
+    width: auto;
+}
+
 .ram-header {
-    float: left;
-    width: 1.8em;
     text-align: center;
     color: #999;
     font-weight: bold;
-}
-
-.ram-corner {
-    height: 1.4em;
 }
 
 .memory-block {

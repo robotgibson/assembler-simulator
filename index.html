@@ -105,11 +105,11 @@
                             </tbody>
                         </table>
                         <p class="text-muted">RAM</p>
-                        <div style="width:31em;" class="source-code">
+                        <div class="ram-grid source-code">
                             <div class="ram-header ram-corner"></div>
                             <div class="ram-header" ng-repeat="col in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]">{{ col.toString(16).toUpperCase() }}</div>
-                            <div style="display:inline;" ng-repeat="m in memory.data track by $index">
-                                <div class="ram-header" ng-if="$index % 16 === 0">{{ ($index / 16).toString(16).toUpperCase() }}</div>
+                            <div style="display:contents;" ng-repeat="m in memory.data track by $index">
+                                <div class="ram-header ram-row-header" ng-if="$index % 16 === 0">{{ ($index / 16).toString(16).toUpperCase() }}</div>
                                 <div class="memory-block"
                                      ng-class="getMemoryCellCss($index)">
                                  <div ng-class="getMemoryInnerCellCss($index)" ng-switch="isInstruction($index)">
