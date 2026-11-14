@@ -2,7 +2,7 @@
     return {
         restrict: 'A',
         link: function (scope, elem, attrs) {
-            var el = elem.get(0);
+            var el = elem[0];
             el.addEventListener('dragover', function (e) {
                 e.preventDefault();
                 el.classList.add('dock-over');
@@ -37,7 +37,7 @@ app.directive('dockPanel', [function () {
     return {
         restrict: 'A',
         link: function (scope, elem, attrs) {
-            var el = elem.get(0);
+            var el = elem[0];
             var pid = attrs.panelId;
             var hdr = el.querySelector('.panel-heading');
             if (!hdr) { return; }

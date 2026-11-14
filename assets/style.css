@@ -463,3 +463,56 @@
     padding: 3px 4px;
     background-color: #FFF;
 }
+
+@media (min-width: 992px) {
+    .container-fluid > .row {
+        display: flex;
+        align-items: stretch;
+    }
+
+    [dock-zone] {
+        display: flex;
+        flex-direction: column;
+    }
+
+    [dock-zone] > [dock-panel]:not(.ng-hide):last-child {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    [dock-zone] > [dock-panel]:not(.ng-hide):last-child > .panel-body {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    [dock-zone] > [dock-panel]:not(.ng-hide):last-child form {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    [dock-zone] > [dock-panel]:not(.ng-hide):last-child #sourceCode {
+        flex: 1 1 auto;
+        resize: vertical;
+    }
+
+    [dock-zone] > [dock-panel]:not(.ng-hide):last-child .disasm-box {
+        flex: 1 1 auto;
+        max-height: none;
+    }
+}
+
+.code-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.code-actions .btn-group {
+    float: none !important;
+}
