@@ -415,3 +415,25 @@
     margin-top: 5px;
     margin-bottom: 5px;
 }
+
+.reg-table {
+    table-layout: fixed;
+    width: 100%;
+    margin-bottom: 6px;
+}
+
+.flag-table {
+    margin-bottom: 10px;
+}
+
+.flag-cell-on {
+    background-color: #D9EDF7 !important;
+    color: #23527C;
+    font-weight: bold;
+}
+
+.flag-cell-fault {
+    background-color: #F2DEDE !important;
+    color: #A94442;
+    font-weight: bold;
+}

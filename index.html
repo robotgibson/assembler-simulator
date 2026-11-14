@@ -155,12 +155,16 @@
                                     </tr>
                                 </tbody>
                             </table>
-                            <div class="flag-bar source-code">
-                                <span class="text-muted" style="font-family:inherit;margin-right:4px;">Flags:</span>
-                                <span class="flag-pill" ng-class="{'flag-on': cpu.zero, 'reg-changed': changed.zero}">Z:{{ cpu.zero ? 1 : 0 }}</span>
-                                <span class="flag-pill" ng-class="{'flag-on': cpu.carry, 'reg-changed': changed.carry}">C:{{ cpu.carry ? 1 : 0 }}</span>
-                                <span class="flag-pill" ng-class="{'flag-fault': cpu.fault, 'reg-changed': changed.fault}">F:{{ cpu.fault ? 1 : 0 }}</span>
-                            </div>
+                            <table class="table table-condensed table-bordered reg-table flag-table">
+                                <thead><tr><th title="Zero Flag">Z</th><th title="Carry Flag">C</th><th title="Fault Flag">F</th></tr></thead>
+                                <tbody>
+                                    <tr class="source-code">
+                                        <td ng-class="{'flag-cell-on': cpu.zero, 'reg-changed': changed.zero}"><small>{{ cpu.zero ? 1 : 0 }}</small></td>
+                                        <td ng-class="{'flag-cell-on': cpu.carry, 'reg-changed': changed.carry}"><small>{{ cpu.carry ? 1 : 0 }}</small></td>
+                                        <td ng-class="{'flag-cell-fault': cpu.fault, 'reg-changed': changed.fault}"><small>{{ cpu.fault ? 1 : 0 }}</small></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                         <div ng-if="cpuMode === '8080'">
                             <table class="table table-condensed table-bordered reg-table">
@@ -185,14 +189,26 @@
                                     </tr>
                                 </tbody>
                             </table>
-                            <div class="flag-bar source-code">
-                                <span class="text-muted" style="font-family:inherit;margin-right:4px;">Flags:</span>
-                                <span class="flag-pill" ng-class="{'flag-on': cpu8080.sign, 'reg-changed': changed.sign}">S:{{ cpu8080.sign ? 1 : 0 }}</span>
-                                <span class="flag-pill" ng-class="{'flag-on': cpu8080.zero, 'reg-changed': changed.zero}">Z:{{ cpu8080.zero ? 1 : 0 }}</span>
-                                <span class="flag-pill" ng-class="{'flag-on': cpu8080.parity, 'reg-changed': changed.parity}">P:{{ cpu8080.parity ? 1 : 0 }}</span>
-                                <span class="flag-pill" ng-class="{'flag-on': cpu8080.carry, 'reg-changed': changed.carry}">C:{{ cpu8080.carry ? 1 : 0 }}</span>
-                                <span class="flag-pill" ng-class="{'flag-fault': cpu8080.fault, 'reg-changed': changed.fault}">F:{{ cpu8080.fault ? 1 : 0 }}</span>
-                            </div>
+                            <table class="table table-condensed table-bordered reg-table flag-table">
+                                <thead>
+                                    <tr>
+                                        <th title="Sign Flag">S</th>
+                                        <th title="Zero Flag">Z</th>
+                                        <th title="Parity Flag">P</th>
+                                        <th title="Carry Flag">C</th>
+                                        <th title="Fault Flag">F</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="source-code">
+                                        <td ng-class="{'flag-cell-on': cpu8080.sign, 'reg-changed': changed.sign}"><small>{{ cpu8080.sign ? 1 : 0 }}</small></td>
+                                        <td ng-class="{'flag-cell-on': cpu8080.zero, 'reg-changed': changed.zero}"><small>{{ cpu8080.zero ? 1 : 0 }}</small></td>
+                                        <td ng-class="{'flag-cell-on': cpu8080.parity, 'reg-changed': changed.parity}"><small>{{ cpu8080.parity ? 1 : 0 }}</small></td>
+                                        <td ng-class="{'flag-cell-on': cpu8080.carry, 'reg-changed': changed.carry}"><small>{{ cpu8080.carry ? 1 : 0 }}</small></td>
+                                        <td ng-class="{'flag-cell-fault': cpu8080.fault, 'reg-changed': changed.fault}"><small>{{ cpu8080.fault ? 1 : 0 }}</small></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                         <div class="ram-toolbar">
                             <span class="text-muted">RAM</span>
