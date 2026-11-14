@@ -1585,7 +1585,7 @@ var app = angular.module('ASMSimulator', []);
     return input;
 }]);
 
-app.controller('Ctrl', ['$document', '$scope', '$timeout', 'cpu', 'memory', 'input', 'assembler', function ($document, $scope, $timeout, cpu, memory, input, assembler) {
+app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', 'cpu', 'memory', 'input', 'assembler', function ($document, $scope, $timeout, $http, opcodes, cpu, memory, input, assembler) {
     $scope.displayInstr = false;
     $scope.memory = memory;
     $scope.cpu = cpu;
@@ -1602,9 +1602,105 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', 'cpu', 'memory', 'inp
                      {speed: 16, desc: "16 HZ"}];
     $scope.speed = 4;
     $scope.setSpeed = function (s) { $scope.speed = s; };
+    $scope.exportAsm = function () {
+        var blob = new Blob([$scope.code], { type: 'text/plain' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'program.asm';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+    $scope.exportState = function () {
+        var st = {
+            code: $scope.code,
+            cpu: { gpr: cpu.gpr.slice(), ip: cpu.ip, sp: cpu.sp, zero: cpu.zero, carry: cpu.carry, fault: cpu.fault },
+            memory: memory.data.slice(),
+            switches: input.data.slice()
+        };
+        var blob = new Blob([JSON.stringify(st, null, 2)], { type: 'application/json' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'asm-sim-state.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+    $scope.triggerImport = function () { document.getElementById('importStateFile').click(); };
+    $scope.importState = function (files) {
+        var file = files && files.item(0);
+        if (!file) { return; }
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            $scope.$apply(function () {
+                if (file.name.toLowerCase().endsWith('.asm')) {
+                    $scope.stop();
+                    $scope.code = e.target.result;
+                    $scope.reset();
+                    return;
+                }
+                try {
+                    var st = JSON.parse(e.target.result);
+                    $scope.stop();
+                    $scope.reset();
+                    if (typeof st.code === 'string') {
+                        $scope.code = st.code;
+                        try {
+                            var asm = assembler.go($scope.code);
+                            $scope.mapping = asm.mapping;
+                            $scope.labels = asm.labels;
+                            $scope.displayInstr = true;
+                        } catch (ex) {}
+                    }
+                    if (st.cpu) {
+                        if (Array.isArray(st.cpu.gpr)) { for (var i = 0; i < 4; i++) { cpu.gpr[i] = st.cpu.gpr[i] || 0; } }
+                        if (typeof st.cpu.ip === 'number') { cpu.ip = st.cpu.ip; }
+                        if (typeof st.cpu.sp === 'number') { cpu.sp = st.cpu.sp; }
+                        cpu.zero = !!st.cpu.zero; cpu.carry = !!st.cpu.carry; cpu.fault = !!st.cpu.fault;
+                    }
+                    if (Array.isArray(st.memory)) {
+                        for (var m = 0; m < memory.data.length && m < st.memory.length; m++) { memory.data[m] = st.memory[m] || 0; }
+                    }
+                    if (Array.isArray(st.switches)) {
+                        for (var s = 0; s < 16; s++) { input.data[s] = !!st.switches[s]; }
+                    }
+                } catch (err) {
+                    $scope.error = 'Invalid state JSON file';
+                }
+            });
+        };
+        reader.readAsText(file);
+    };
     $scope.outputStartIndex = 232;
-
-    $scope.code = "; Simple example\n; Writes Hello World to the output\n\n	JMP start\nhello: DB \"Hello World!\" ; Variable\n       DB 0	; String terminator\n\nstart:\n	MOV C, hello    ; Point to var \n	MOV D, 232	; Point to output\n	CALL print\n        HLT             ; Stop execution\n\nprint:			; print(C:*from, D:*to)\n	PUSH A\n	PUSH B\n	MOV B, 0\n.loop:\n	MOV A, [C]	; Get char from var\n	MOV [D], A	; Write to output\n	INC C\n	INC D  \n	CMP B, [C]	; Check if end\n	JNZ .loop	; jump if not\n\n	POP B\n	POP A\n	RET";
+    $scope.changed = { gprA: false, gprB: false, gprC: false, gprD: false, sp: false, zero: false, carry: false, fault: false };
+    var opcodeNames = {};
+    angular.forEach(opcodes, function (v, k) { opcodeNames[v] = k; });
+    $scope.examples = [
+        { name: 'Hello World', file: 'examples/hello-world.asm' },
+        { name: 'Switches & 16-bit Math', file: 'examples/switches-and-16bit-math.asm' },
+        { name: 'Simple Example 1', file: 'examples/simple-example-1.asm' },
+        { name: 'Simple Example 2', file: 'examples/simple-example-2.asm' },
+        { name: 'Simple Example 3', file: 'examples/simple-example-3.asm' }
+    ];
+    $scope.selectedExample = '';
+    $scope.loadExample = function (file) {
+        if (!file) { return; }
+        $http.get(file).then(function (resp) {
+            $scope.stop();
+            $scope.code = resp.data;
+            $scope.reset();
+        }, function () {
+            $scope.error = 'Failed to load example: ' + file;
+        });
+    };
+    $scope.getMemoryTooltip = function (idx) {
+        var val = memory.data.at(idx);
+        var ha = ('0' + idx.toString(16).toUpperCase()).slice(-2);
+        var hv = ('0' + val.toString(16).toUpperCase()).slice(-2);
+        var tip = 'Addr: 0x' + ha + ' (' + idx + ') | Val: 0x' + hv + ' (' + val + ')';
+        if (val >= 32 && val <= 126) { tip += " | Char: '" + String.fromCharCode(val) + "'"; }
+        if ($scope.isInstruction(idx) && opcodeNames.hasOwnProperty(val)) { tip += ' | Op: ' + opcodeNames[val]; }
+        return tip;
+    };
+    $scope.code = "; Simple example\n; Writes Hello World to the output\n\n\tJMP start\nhello: DB \"Hello World!\" ; Variable\n       DB 0\t; String terminator\n\nstart:\n\tMOV C, hello    ; Point to var \n\tMOV D, 232\t; Point to output\n\tCALL print\n        HLT             ; Stop execution\n\nprint:\t\t\t; print(C:*from, D:*to)\n\tPUSH A\n\tPUSH B\n\tMOV B, 0\n.loop:\n\tMOV A, [C]\t; Get char from var\n\tMOV [D], A\t; Write to output\n\tINC C\n\tINC D  \n\tCMP B, [C]\t; Check if end\n\tJNZ .loop\t; jump if not\n\n\tPOP B\n\tPOP A\n\tRET";
 
     $scope.reset = function () {
 		$timeout.cancel(runner);
@@ -1619,6 +1715,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', 'cpu', 'memory', 'inp
         memory.reset();
         $scope.error = '';
         $scope.selectedLine = -1;
+        $scope.changed = { gprA: false, gprB: false, gprC: false, gprD: false, sp: false, zero: false, carry: false, fault: false };
     };
 
     $scope.executeStep = function () {
@@ -1627,8 +1724,10 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', 'cpu', 'memory', 'inp
         }
 
         try {
+            var pG = cpu.gpr.slice(), pS = cpu.sp, pZ = cpu.zero, pC = cpu.carry, pF = cpu.fault;
             // Execute
             var res = cpu.step();
+            $scope.changed = { gprA: cpu.gpr.at(0)!==pG.at(0), gprB: cpu.gpr.at(1)!==pG.at(1), gprC: cpu.gpr.at(2)!==pG.at(2), gprD: cpu.gpr.at(3)!==pG.at(3), sp: cpu.sp!==pS, zero: cpu.zero!==pZ, carry: cpu.carry!==pC, fault: cpu.fault!==pF };
 
             // Mark in code
             if (cpu.ip in $scope.mapping) {

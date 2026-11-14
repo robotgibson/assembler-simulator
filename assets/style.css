@@ -101,3 +101,7 @@
 .codelabel-line a {
     cursor: pointer;
 }
+.reg-changed {
+    background-color: #FCF8E3;
+    transition: background-color 0.2s ease;
+}
