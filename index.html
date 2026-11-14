@@ -119,9 +119,17 @@
                     <div class="panel-heading">
                         <h4 class="panel-title">Input<span class="panel-ctrls"><span role="button" ng-click="$event.stopPropagation(); togglePanelCollapse('input')" title="Collapse/Expand">{{ dock.collapsed['input'] ? '+' : '\u2014' }}</span><span role="button" ng-click="$event.stopPropagation(); togglePanelHidden('input')" title="Hide Panel">x</span></span></h4>
                     </div>
-                    <div ng-hide="dock.collapsed['input']" class="panel-body source-code clearfix">
-                        <div style="float:left;" ng-repeat="i in input.data track by $index">
-                            <span ng-click="setInputSwitch($index)" ng-class="{'input': true, 'input-on': i,'input-off': !i}">{{ $index }}</span>
+                    <div ng-hide="dock.collapsed['input']" class="panel-body source-code input-panel-body">
+                        <div class="input-switches">
+                            <span ng-repeat="i in input.data track by $index"
+                                  ng-click="setInputSwitch($index)"
+                                  ng-class="input.data.at($index) ? 'input input-on' : 'input input-off'"
+                                  title="Toggle bit {{ $index }}">{{ $index }}</span>
+                        </div>
+                        <div class="input-hex-ctl">
+                            <span class="text-muted" style="font-family:inherit;font-size:12px;">Hex:</span>
+                            <input type="text" class="ram-jump-in" ng-model="inputHex" ng-change="setInputHex(inputHex)" ng-keydown="$event.keyCode === 13 && setInputHex(inputHex)" maxlength="4" title="Type 16-bit hex value (bits 15..0)">
+                            <button type="button" class="btn btn-xs btn-default" ng-click="clearInput()" title="Clear all input bits">Clear</button>
                         </div>
                     </div>
                 </div>
@@ -131,7 +139,7 @@
                     </div>
                     <div ng-hide="dock.collapsed['output']" class="panel-body source-code">
                         <div style="float:left;" class="output"
-                             ng-repeat="m in memory.data | startFrom: outputStartIndex track by $index">
+                             ng-repeat="m in memory.data | startFrom: outputStartIndex | limitTo: (memory.data.length - 2 - outputStartIndex) track by $index">
                             <span>{{ getChar(m) }}</span>
                         </div>
                     </div>

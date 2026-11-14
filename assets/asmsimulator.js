@@ -1872,6 +1872,8 @@ var app = angular.module('ASMSimulator', []);
             if (op === 0xE3) { var lo = memory.load(self.sp), hi = memory.load(self.sp + 1); memory.store(self.sp, self.regs.at(5)); memory.store(self.sp + 1, self.regs.at(4)); setHL((hi << 8) | lo); return true; }
             if (op === 0xE9) { self.ip = getHL() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
             if (op === 0xF9) { self.sp = getHL() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
+            if (op === 0xDB) { var p = fetch8(); writeReg(7, p === 0 ? memory.load(memory.data.length - 1) : (p === 1 ? memory.load(memory.data.length - 2) : 0)); return true; }
+            if (op === 0xD3) { var p = fetch8(); if (p >= 0 && p < 24) { memory.store(memory.data.length - 24 + p, self.regs.at(7)); } return true; }
             throw "Invalid 8080 opcode: 0x" + op.toString(16).toUpperCase();
         } catch (e) { self.fault = true; throw e; }
     };
@@ -1934,6 +1936,8 @@ var app = angular.module('ASMSimulator', []);
         if (op === 0xE3) { return { len: 1, text: 'XTHL' }; }
         if (op === 0xE9) { return { len: 1, text: 'PCHL' }; }
         if (op === 0xF9) { return { len: 1, text: 'SPHL' }; }
+        if (op === 0xDB) { return { len: 2, text: 'IN 0x' + hex2(b1) }; }
+        if (op === 0xD3) { return { len: 2, text: 'OUT 0x' + hex2(b1) }; }
         return { len: 1, text: 'DB 0x' + hex2(op) };
     }
 
@@ -1988,6 +1992,36 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     $scope.memory = memory;
     $scope.cpu = cpu;
     $scope.input = input;
+    $scope.inputHex = '0000';
+    $scope.refreshInputHex = function () {
+        var val = 0;
+        for (var i = 0; i < 16; i++) { if (input.data.at(i)) { val |= (1 << i); } }
+        var h = val.toString(16).toUpperCase();
+        while (h.length < 4) { h = '0' + h; }
+        $scope.inputHex = h;
+    };
+    $scope.setInputSwitch = function (index) {
+        if (index >= input.data.length) {
+            throw "Error input out of bounds";
+        }
+        input.setBit(index);
+        $scope.refreshInputHex();
+    };
+    $scope.setInputHex = function (hexStr) {
+        var val = parseInt((hexStr || '0').replace(/^0x/i, ''), 16);
+        if (isNaN(val)) { return; }
+        val &= 0xFFFF;
+        for (var i = 0; i < 16; i++) {
+            input.data.splice(i, 1, ((val >> i) & 1) === 1);
+        }
+        input.sync();
+        $scope.refreshInputHex();
+    };
+    $scope.clearInput = function () {
+        input.reset();
+        input.sync();
+        $scope.refreshInputHex();
+    };
     $scope.cpu8080 = cpu8080;
     $scope.cpuMode = '8bit';
     $scope.showAscii = true;
@@ -2035,7 +2069,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
         $scope.ramWindowBase = 0;
         $scope.ramJumpHex = '0000';
         memory.resize(bytes);
-        $scope.outputStartIndex = (bytes === 256) ? 232 : (bytes - 24);
+        $scope.outputStartIndex = (bytes === 256) ? 232 : (bytes - 26);
         $scope.rebuildRamRows();
         $scope.reset();
     };
@@ -2315,7 +2349,8 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
         { name: 'Simple Example 1', file: 'examples/simple-example-1.asm', mode: '8bit' },
         { name: 'Simple Example 2', file: 'examples/simple-example-2.asm', mode: '8bit' },
         { name: 'Simple Example 3', file: 'examples/simple-example-3.asm', mode: '8bit' },
-        { name: 'Hello World (8080)', file: 'examples/hello-world-8080.asm', mode: '8080' }
+        { name: 'Hello World (8080)', file: 'examples/hello-world-8080.asm', mode: '8080' },
+        { name: 'Input Switches (8080)', file: 'examples/switches-8080.asm', mode: '8080' }
     ];
     $scope.selectedExample = '';
     $scope.loadExample = function (file) {
@@ -2394,7 +2429,13 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
 
             return res;
         } catch (e) {
-            $scope.error = e;
+            if (typeof e === 'string') {
+                $scope.error = e;
+            } else if (e && e.error) {
+                $scope.error = (e.line !== undefined ? e.line + ' | ' : '') + e.error;
+            } else {
+                $scope.error = 'CPU halted (HLT / 0x00).';
+            }
             return false;
         }
     };
@@ -2403,6 +2444,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     $scope.run = function () {
         if (!$scope.checkPrgrmLoaded()) {
             $scope.assemble();
+            if ($scope.error) { return; }
         }
 
         $scope.isRunning = true;
@@ -2421,13 +2463,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     };
 
     $scope.checkPrgrmLoaded = function () {
-        for (var i = 0, l = memory.data.length; i < l; i++) {
-            if (memory.data[i] !== 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return !!$scope.labels;
     };
 
     $scope.getChar = function (value) {
@@ -2483,7 +2519,10 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     };
 
     $scope.getMemoryCellCss = function (index) {
-        if (index >= $scope.outputStartIndex) {
+        if (index >= memory.data.length - 2) {
+            return 'input-bg';
+        }
+        if (index >= $scope.outputStartIndex && index < memory.data.length - 2) {
             return 'output-bg';
         } else if ($scope.isInstruction(index)) {
             return 'instr-bg';
@@ -2603,12 +2642,6 @@ app.directive('selectLine', [function () {
         }
     };
 
-    $scope.setInputSwitch = function (index) {
-        if (index >= input.data.length) {
-            throw "Error input out of bounds";
-        }
-        input.setBit(index);
-    };
 }]);
 
 ;app.directive('dockZone', [function () {

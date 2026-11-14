@@ -582,3 +582,50 @@
 .ram-wide-addr .ram-addr {
     width: 4.1em;
 }
+
+.input-panel-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.input-switches {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.input-on {
+    color: #FFF;
+    font-weight: bold;
+}
+
+.input-hex-ctl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+[dock-panel][data-panel-id="output"] .panel-body {
+    flex: 0 0 auto !important;
+}
+
+.panel-body.ng-hide {
+    display: none !important;
+}
+
+.input {
+    user-select: none;
+    border-radius: 2px;
+}
+
+.input-on {
+    background-color: #5cb85c !important;
+    color: #FFFFFF !important;
+    font-weight: bold;
+}
+
+.input-bg {
+    background-color: #DFF0D8;
+}
