@@ -204,6 +204,9 @@ var app = angular.module('ASMSimulator', []);
                             }
 
                             switch (instr) {
+                                case 'NOP':
+                                    code.push(opcodes.NOP);
+                                    break;
                                 case 'DB':
                                     p1 = getValue(match[op1_group]);
 
@@ -1301,6 +1304,10 @@ var app = angular.module('ASMSimulator', []);
                         self.ip++;
                         break;
 
+                    case opcodes.NOP:
+                        self.ip++;
+                        break;
+
                     default:
                         throw "Invalid op code: " + instr;
                 }
@@ -1441,7 +1448,8 @@ var app = angular.module('ASMSimulator', []);
         SHR_REG_WITH_REG: 94,
         SHR_REGADDRESS_WITH_REG: 95,
         SHR_ADDRESS_WITH_REG: 96,
-        SHR_NUMBER_WITH_REG: 97
+        SHR_NUMBER_WITH_REG: 97,
+        NOP: 98
     };
 
     return opcodes;
