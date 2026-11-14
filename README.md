@@ -21,7 +21,7 @@ No build step is required—serve the repository root with any static HTTP serve
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000` in your browser. *(If modifying `src/` files, run `grunt` to rebuild `assets/asmsimulator.js`.)*
+Then open `http://localhost:8000` in your browser. *(If modifying `src/` files, run `python3 build.py` to rebuild `assets/asmsimulator.js`.)*
 
 ### Background & Credits
 

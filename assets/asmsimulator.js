@@ -1,5 +1,100 @@
-var app = angular.module('ASMSimulator', []);
-;app.service('assembler', ['opcodes', function (opcodes) {
+var app = angular.module('ASMSimulator', []);;
+app.service('opcodes', [function() {
+    var opcodes = {
+        NONE: 0,
+        MOV_REG_TO_REG: 1, MOV_ADDRESS_TO_REG: 2, MOV_REGADDRESS_TO_REG: 3,
+        MOV_REG_TO_ADDRESS: 4, MOV_REG_TO_REGADDRESS: 5, MOV_NUMBER_TO_REG: 6,
+        MOV_NUMBER_TO_ADDRESS: 7, MOV_NUMBER_TO_REGADDRESS: 8,
+        ADD_REG_TO_REG: 10, ADD_REGADDRESS_TO_REG: 11, ADD_ADDRESS_TO_REG: 12, ADD_NUMBER_TO_REG: 13,
+        SUB_REG_FROM_REG: 14, SUB_REGADDRESS_FROM_REG: 15, SUB_ADDRESS_FROM_REG: 16, SUB_NUMBER_FROM_REG: 17,
+        INC_REG: 18, DEC_REG: 19,
+        CMP_REG_WITH_REG: 20, CMP_REGADDRESS_WITH_REG: 21, CMP_ADDRESS_WITH_REG: 22, CMP_NUMBER_WITH_REG: 23,
+        JMP_REGADDRESS: 30, JMP_ADDRESS: 31, JC_REGADDRESS: 32, JC_ADDRESS: 33,
+        JNC_REGADDRESS: 34, JNC_ADDRESS: 35, JZ_REGADDRESS: 36, JZ_ADDRESS: 37,
+        JNZ_REGADDRESS: 38, JNZ_ADDRESS: 39, JA_REGADDRESS: 40, JA_ADDRESS: 41,
+        JNA_REGADDRESS: 42, JNA_ADDRESS: 43,
+        PUSH_REG: 50, PUSH_REGADDRESS: 51, PUSH_ADDRESS: 52, PUSH_NUMBER: 53,
+        POP_REG: 54, CALL_REGADDRESS: 55, CALL_ADDRESS: 56, RET: 57,
+        MUL_REG: 60, MUL_REGADDRESS: 61, MUL_ADDRESS: 62, MUL_NUMBER: 63,
+        DIV_REG: 64, DIV_REGADDRESS: 65, DIV_ADDRESS: 66, DIV_NUMBER: 67,
+        AND_REG_WITH_REG: 70, AND_REGADDRESS_WITH_REG: 71, AND_ADDRESS_WITH_REG: 72, AND_NUMBER_WITH_REG: 73,
+        OR_REG_WITH_REG: 74, OR_REGADDRESS_WITH_REG: 75, OR_ADDRESS_WITH_REG: 76, OR_NUMBER_WITH_REG: 77,
+        XOR_REG_WITH_REG: 78, XOR_REGADDRESS_WITH_REG: 79, XOR_ADDRESS_WITH_REG: 80, XOR_NUMBER_WITH_REG: 81,
+        NOT_REG: 82,
+        SHL_REG_WITH_REG: 90, SHL_REGADDRESS_WITH_REG: 91, SHL_ADDRESS_WITH_REG: 92, SHL_NUMBER_WITH_REG: 93,
+        SHR_REG_WITH_REG: 94, SHR_REGADDRESS_WITH_REG: 95, SHR_ADDRESS_WITH_REG: 96, SHR_NUMBER_WITH_REG: 97,
+        NOP: 98,
+        ADDC_REG_TO_REG: 99, ADDC_REGADDRESS_TO_REG: 100, ADDC_ADDRESS_TO_REG: 101, ADDC_NUMBER_TO_REG: 102,
+        SUBC_REG_FROM_REG: 103, SUBC_REGADDRESS_FROM_REG: 104, SUBC_ADDRESS_FROM_REG: 105, SUBC_NUMBER_FROM_REG: 106
+    };
+    return opcodes;
+}]);;
+app.service('memory', [function () {
+    var memory = {
+        data: Array(256),
+        lastAccess: -1,
+        load: function (address) {
+            if (address < 0 || address >= this.data.length) {
+                throw "Memory access violation at " + address;
+            }
+            this.lastAccess = address;
+            return this.data[address];
+        },
+        store: function (address, value) {
+            if (address < 0 || address >= this.data.length) {
+                throw "Memory access violation at " + address;
+            }
+            this.lastAccess = address;
+            this.data[address] = value;
+        },
+        resize: function (size) {
+            this.data = new Array(size);
+            this.reset();
+        },
+        reset: function () {
+            this.lastAccess = -1;
+            for (var i = 0, l = this.data.length; i < l; i++) {
+                this.data[i] = 0;
+            }
+        }
+    };
+    memory.reset();
+    return memory;
+}]);;
+app.service('input', ['memory', function (memory) {
+    var input = {
+        data: Array(16),
+        sync: function () {
+            var byte = 0;
+            for (var i = 0; i < 8; ++i) {
+                if (this.data[i]) {
+                    byte += Math.pow(2, i);
+                }
+            }
+            memory.store(memory.data.length - 1, byte);
+            byte = 0;
+            for (; i < 16; ++i) {
+                if (this.data[i]) {
+                    byte += Math.pow(2, i - 8);
+                }
+            }
+            memory.store(memory.data.length - 2, byte);
+        },
+        reset: function () {
+            this.data.fill(false);
+        },
+        setBit: function (bit) {
+            if (bit >= this.data.length) {
+                throw "Input access error: " + bit;
+            }
+            this.data[bit] = !this.data[bit];
+            this.sync();
+        }
+    };
+    input.reset();
+    return input;
+}]);;
+app.service('assembler', ['opcodes', function (opcodes) {
     return {
         go: function (input) {
             // Use https://www.debuggex.com/
@@ -695,8 +790,8 @@ var app = angular.module('ASMSimulator', []);
             return {code: code, mapping: mapping, labels: labels};
         }
     };
-}]);
-;app.service('cpu', ['opcodes', 'memory', function(opcodes, memory) {
+}]);;
+app.service('cpu', ['opcodes', 'memory', function(opcodes, memory) {
     var cpu = {
         step: function() {
             var self = this;
@@ -1426,173 +1521,7 @@ var app = angular.module('ASMSimulator', []);
 
     cpu.reset();
     return cpu;
-}]);
-;app.service('memory', [function () {
-    var memory = {
-        data: Array(256),
-        lastAccess: -1,
-        resize: function (newSize) {
-            this.data = new Array(newSize);
-            this.reset();
-        },
-        load: function (address) {
-            var self = this;
-
-            if (address < 0 || address >= self.data.length) {
-                throw "Memory access violation at " + address;
-            }
-
-            self.lastAccess = address;
-            return self.data[address];
-        },
-        store: function (address, value) {
-            var self = this;
-
-            if (address < 0 || address >= self.data.length) {
-                throw "Memory access violation at " + address;
-            }
-
-            self.lastAccess = address;
-            self.data[address] = value;
-        },
-        resize: function (size) {
-            this.data = new Array(size);
-            this.reset();
-        },
-        reset: function () {
-            var self = this;
-
-            self.lastAccess = -1;
-
-            for (var i = 0, l = self.data.length; i < l; i++) {
-                self.data[i] = 0;
-            }
-        }
-    };
-
-    memory.reset();
-    return memory;
-}]);
-;app.service('opcodes', [function() {
-    var opcodes = {
-        NONE: 0,
-        MOV_REG_TO_REG: 1,
-        MOV_ADDRESS_TO_REG: 2,
-        MOV_REGADDRESS_TO_REG: 3,
-        MOV_REG_TO_ADDRESS: 4,
-        MOV_REG_TO_REGADDRESS: 5,
-        MOV_NUMBER_TO_REG: 6,
-        MOV_NUMBER_TO_ADDRESS: 7,
-        MOV_NUMBER_TO_REGADDRESS: 8,
-        ADD_REG_TO_REG: 10,
-        ADD_REGADDRESS_TO_REG: 11,
-        ADD_ADDRESS_TO_REG: 12,
-        ADD_NUMBER_TO_REG: 13,
-        SUB_REG_FROM_REG: 14,
-        SUB_REGADDRESS_FROM_REG: 15,
-        SUB_ADDRESS_FROM_REG: 16,
-        SUB_NUMBER_FROM_REG: 17,
-        INC_REG: 18,
-        DEC_REG: 19,
-        CMP_REG_WITH_REG: 20,
-        CMP_REGADDRESS_WITH_REG: 21,
-        CMP_ADDRESS_WITH_REG: 22,
-        CMP_NUMBER_WITH_REG: 23,
-        JMP_REGADDRESS: 30,
-        JMP_ADDRESS: 31,
-        JC_REGADDRESS: 32,
-        JC_ADDRESS: 33,
-        JNC_REGADDRESS: 34,
-        JNC_ADDRESS: 35,
-        JZ_REGADDRESS: 36,
-        JZ_ADDRESS: 37,
-        JNZ_REGADDRESS: 38,
-        JNZ_ADDRESS: 39,
-        JA_REGADDRESS: 40,
-        JA_ADDRESS: 41,
-        JNA_REGADDRESS: 42,
-        JNA_ADDRESS: 43,
-        PUSH_REG: 50,
-        PUSH_REGADDRESS: 51,
-        PUSH_ADDRESS: 52,
-        PUSH_NUMBER: 53,
-        POP_REG: 54,
-        CALL_REGADDRESS: 55,
-        CALL_ADDRESS: 56,
-        RET: 57,
-        MUL_REG: 60,
-        MUL_REGADDRESS: 61,
-        MUL_ADDRESS: 62,
-        MUL_NUMBER: 63,
-        DIV_REG: 64,
-        DIV_REGADDRESS: 65,
-        DIV_ADDRESS: 66,
-        DIV_NUMBER: 67,
-        AND_REG_WITH_REG: 70,
-        AND_REGADDRESS_WITH_REG: 71,
-        AND_ADDRESS_WITH_REG: 72,
-        AND_NUMBER_WITH_REG: 73,
-        OR_REG_WITH_REG: 74,
-        OR_REGADDRESS_WITH_REG: 75,
-        OR_ADDRESS_WITH_REG: 76,
-        OR_NUMBER_WITH_REG: 77,
-        XOR_REG_WITH_REG: 78,
-        XOR_REGADDRESS_WITH_REG: 79,
-        XOR_ADDRESS_WITH_REG: 80,
-        XOR_NUMBER_WITH_REG: 81,
-        NOT_REG: 82,
-        SHL_REG_WITH_REG: 90,
-        SHL_REGADDRESS_WITH_REG: 91,
-        SHL_ADDRESS_WITH_REG: 92,
-        SHL_NUMBER_WITH_REG: 93,
-        SHR_REG_WITH_REG: 94,
-        SHR_REGADDRESS_WITH_REG: 95,
-        SHR_ADDRESS_WITH_REG: 96,
-        SHR_NUMBER_WITH_REG: 97,
-        NOP: 98,
-        ADDC_REG_TO_REG: 99,
-        ADDC_REGADDRESS_TO_REG: 100,
-        ADDC_ADDRESS_TO_REG: 101,
-        ADDC_NUMBER_TO_REG: 102,
-        SUBC_REG_FROM_REG: 103,
-        SUBC_REGADDRESS_FROM_REG: 104,
-        SUBC_ADDRESS_FROM_REG: 105,
-        SUBC_NUMBER_FROM_REG: 106
-    };
-
-    return opcodes;
-}]);
-;app.service('input', ['memory', function (memory) {
-    var input = {
-        data: Array(16),
-        reset: function () {
-            this.data.fill(false);
-        },
-        setBit: function (bit) {
-            if (bit >= this.data.length) {
-                throw "Input access error: " + bit;
-            }
-            this.data[bit] = !this.data[bit];
-            var byte = 0;
-            for (var i = 0; i < 8; ++i) {
-                if (this.data[i]) {
-                    byte += Math.pow(2, i);
-                }
-            }
-            memory.store(memory.data.length - 1, byte);
-            byte = 0;
-            for (; i < 16; ++i) {
-                if (this.data[i]) {
-                    byte += Math.pow(2, i - 8);
-                }
-            }
-            memory.store(memory.data.length - 2, byte);
-        }
-    };
-    input.reset();
-    return input;
-}]);
-
+}]);;
 ;app.service('assembler8080', [function () {
     var regs = { B: 0, C: 1, D: 2, E: 3, H: 4, L: 5, M: 6, A: 7 };
     var pairs = { B: 0, BC: 0, D: 1, DE: 1, H: 2, HL: 2, SP: 3 };
@@ -1647,7 +1576,7 @@ var app = angular.module('ASMSimulator', []);
             var lines = input.split('\n');
             var code = [], mapping = {}, labels = {}, fixups = [];
             function emit8(v, li, isOp) {
-                if (code.length >= 65536) { throw "Program exceeds 64K address space"; }
+                if (code.length >= 256) { throw "Program exceeds 256 bytes of RAM"; }
                 if (isOp) { mapping[code.length] = li; }
                 code.push(v & 0xFF);
             }
@@ -1745,7 +1674,7 @@ var app = angular.module('ASMSimulator', []);
             return { code: code, mapping: mapping, labels: labels };
         }
     };
-}]);
+}]);;
 ;app.service('cpu8080', ['memory', function (memory) {
     // Registers: B=0, C=1, D=2, E=3, H=4, L=5, M=6, A=7
     var self = {
@@ -1782,9 +1711,9 @@ var app = angular.module('ASMSimulator', []);
         if (rp === 0) { self.regs.splice(0, 2, (val >> 8) & 0xFF, val & 0xFF); }
         else if (rp === 1) { self.regs.splice(2, 2, (val >> 8) & 0xFF, val & 0xFF); }
         else if (rp === 2) { setHL(val); }
-        else { self.sp = val & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); }
+        else { self.sp = val & 0xFF; }
     }
-    function fetch8() { var b = memory.load(self.ip); self.ip = (self.ip + 1) & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return b; }
+    function fetch8() { var b = memory.load(self.ip); self.ip = (self.ip + 1) & 0xFF; return b; }
     function fetch16() { var lo = fetch8(), hi = fetch8(); return (hi << 8) | lo; }
     function push16(val) {
         if (self.sp < 2) { throw "Stack overflow"; }
@@ -1792,7 +1721,7 @@ var app = angular.module('ASMSimulator', []);
         self.sp -= 1; memory.store(self.sp, val & 0xFF);
     }
     function pop16() {
-        var maxSp = (memory.data.length === 256) ? 229 : (Math.min(memory.data.length, 65536) - 2); if (self.sp > maxSp) { throw "Stack underflow"; }
+        if (self.sp > 229) { throw "Stack underflow"; }
         var lo = memory.load(self.sp); self.sp += 1;
         var hi = memory.load(self.sp); self.sp += 1;
         return (hi << 8) | lo;
@@ -1850,12 +1779,12 @@ var app = angular.module('ASMSimulator', []);
             if (op === 0x37) { self.carry = true; return true; }
             if (op === 0x3F) { self.carry = !self.carry; return true; }
             if ((op & 0xC7) === 0xC6) { doAlu((op >> 3) & 7, fetch8()); return true; }
-            if (op === 0xC3) { var t = fetch16(); if (t >= memory.data.length) { throw "PC outside memory"; } self.ip = t; return true; }
-            if ((op & 0xC7) === 0xC2) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= memory.data.length) { throw "PC outside memory"; } self.ip = t; } return true; }
-            if (op === 0xCD) { var t = fetch16(); if (t >= memory.data.length) { throw "PC outside memory"; } push16(self.ip); self.ip = t; return true; }
-            if ((op & 0xC7) === 0xC4) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= memory.data.length) { throw "PC outside memory"; } push16(self.ip); self.ip = t; } return true; }
-            if (op === 0xC9) { self.ip = pop16() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
-            if ((op & 0xC7) === 0xC0) { if (checkCond((op >> 3) & 7)) { self.ip = pop16() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); } return true; }
+            if (op === 0xC3) { var t = fetch16(); if (t >= 256) { throw "PC outside memory"; } self.ip = t; return true; }
+            if ((op & 0xC7) === 0xC2) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= 256) { throw "PC outside memory"; } self.ip = t; } return true; }
+            if (op === 0xCD) { var t = fetch16(); if (t >= 256) { throw "PC outside memory"; } push16(self.ip); self.ip = t; return true; }
+            if ((op & 0xC7) === 0xC4) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= 256) { throw "PC outside memory"; } push16(self.ip); self.ip = t; } return true; }
+            if (op === 0xC9) { self.ip = pop16() & 0xFF; return true; }
+            if ((op & 0xC7) === 0xC0) { if (checkCond((op >> 3) & 7)) { self.ip = pop16() & 0xFF; } return true; }
             if ((op & 0xCF) === 0xC5) {
                 var rp = (op >> 4) & 3;
                 if (rp === 3) { push16((self.regs.at(7) << 8) | ((self.sign?0x80:0)|(self.zero?0x40:0)|(self.parity?0x04:0)|2|(self.carry?1:0))); }
@@ -1870,16 +1799,13 @@ var app = angular.module('ASMSimulator', []);
             }
             if (op === 0xEB) { var d = self.regs.at(2), e = self.regs.at(3); self.regs.splice(2, 2, self.regs.at(4), self.regs.at(5)); self.regs.splice(4, 2, d, e); return true; }
             if (op === 0xE3) { var lo = memory.load(self.sp), hi = memory.load(self.sp + 1); memory.store(self.sp, self.regs.at(5)); memory.store(self.sp + 1, self.regs.at(4)); setHL((hi << 8) | lo); return true; }
-            if (op === 0xE9) { self.ip = getHL() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
-            if (op === 0xF9) { self.sp = getHL() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
-            if (op === 0xDB) { var p = fetch8(); writeReg(7, p === 0 ? memory.load(memory.data.length - 1) : (p === 1 ? memory.load(memory.data.length - 2) : 0)); return true; }
-            if (op === 0xD3) { var p = fetch8(); if (p >= 0 && p < 24) { memory.store(memory.data.length - 24 + p, self.regs.at(7)); } return true; }
+            if (op === 0xE9) { self.ip = getHL() & 0xFF; return true; }
+            if (op === 0xF9) { self.sp = getHL() & 0xFF; return true; }
             throw "Invalid 8080 opcode: 0x" + op.toString(16).toUpperCase();
         } catch (e) { self.fault = true; throw e; }
     };
     return self;
-}]);
-
+}]);;
 ;app.service('disasm', ['opcodes', function (opcodes) {
     var opNames = {};
     angular.forEach(opcodes, function (v, k) { opNames[v] = k; });
@@ -1936,8 +1862,6 @@ var app = angular.module('ASMSimulator', []);
         if (op === 0xE3) { return { len: 1, text: 'XTHL' }; }
         if (op === 0xE9) { return { len: 1, text: 'PCHL' }; }
         if (op === 0xF9) { return { len: 1, text: 'SPHL' }; }
-        if (op === 0xDB) { return { len: 2, text: 'IN 0x' + hex2(b1) }; }
-        if (op === 0xD3) { return { len: 2, text: 'OUT 0x' + hex2(b1) }; }
         return { len: 1, text: 'DB 0x' + hex2(op) };
     }
 
@@ -1985,8 +1909,7 @@ var app = angular.module('ASMSimulator', []);
             return rows;
         }
     };
-}]);
-
+}]);;
 app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', 'disasm', 'cpu', 'cpu8080', 'memory', 'input', 'assembler', 'assembler8080', function ($document, $scope, $timeout, $http, opcodes, disasm, cpu, cpu8080, memory, input, assembler, assembler8080) {
     $scope.displayInstr = false;
     $scope.memory = memory;
@@ -2378,6 +2301,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     $scope.reset = function () {
 		$timeout.cancel(runner);
 		input.reset();
+		$scope.refreshInputHex();
 		$scope.isRunning = false;
 		$scope.labels = null;
 		
@@ -2550,8 +2474,8 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
             return '';
         }
     };
-}]);
-;app.filter('flag', function() {
+}]);;
+app.filter('flag', function() {
     return function(input) {
         // convert flag to uppercase
         var str = input.toString().toUpperCase();
@@ -2642,8 +2566,7 @@ app.directive('selectLine', [function () {
         }
     };
 
-}]);
-
+}]);;
 ;app.directive('dockZone', [function () {
     return {
         restrict: 'A',
