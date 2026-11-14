@@ -23,6 +23,22 @@
                     <button type="button" class="btn navbar-btn" ng-class="cpuMode === '8bit' ? 'btn-warning' : 'btn-default'" ng-click="setCpuMode('8bit')" ng-disabled="isRunning">Simple 8-bit</button>
                     <button type="button" class="btn navbar-btn" ng-class="cpuMode === '8080' ? 'btn-warning' : 'btn-default'" ng-click="setCpuMode('8080')" ng-disabled="isRunning">Intel 8080</button>
                 </div>
+                <div class="btn-group dock-dropdown" style="margin-left:8px;position:relative;">
+                    <button type="button" class="btn btn-default navbar-btn" ng-click="layoutMenuOpen = !layoutMenuOpen">Layout <span class="caret"></span></button>
+                    <div class="dock-menu" ng-show="layoutMenuOpen">
+                        <div class="dock-menu-hdr">Columns</div>
+                        <div class="btn-group btn-group-xs btn-group-justified" style="margin-bottom:6px;">
+                            <a class="btn" ng-class="dock.cols === 3 ? 'btn-primary' : 'btn-default'" ng-click="setDockCols(3)">3 Cols</a>
+                            <a class="btn" ng-class="dock.cols === 2 ? 'btn-primary' : 'btn-default'" ng-click="setDockCols(2)">2 Cols</a>
+                        </div>
+                        <div class="dock-menu-hdr">Panels</div>
+                        <label class="dock-chk" ng-repeat="p in panelMeta">
+                            <input type="checkbox" ng-checked="!dock.hidden[p.id]" ng-click="togglePanelHidden(p.id)"> {{ p.name }}
+                        </label>
+                        <hr style="margin:6px 0;">
+                        <button type="button" class="btn btn-xs btn-default btn-block" ng-click="resetDockLayout(); layoutMenuOpen = false">Reset Layout</button>
+                    </div>
+                </div>
             </div>
             <div class="navbar-header navbar-right">
                 <a class="navbar-brand" style="color:#FFFFFF">Simple 8-bit Assembler Simulator</a>
@@ -32,12 +48,12 @@
     <div class="container-fluid" style="max-width:1600px;">
         <div class="alert alert-danger" ng-show="error">{{ error }}</div>
         <div class="row">
-            <div class="col-lg-4 col-md-4">
-                <div class="panel panel-default">
+            <div id="dock-col1" dock-zone ng-class="dock.cols === 2 ? 'col-lg-5 col-md-5' : 'col-lg-4 col-md-4'">
+                <div class="panel panel-default" dock-panel data-panel-id="code" ng-hide="dock.hidden['code']">
                     <div class="panel-heading">
-                        <h4 class="panel-title">Code <small>(<a href="./instruction-set.html" target="_blank" style="color: #337AB7">Instruction Set</a>)</small><span class="pull-right" style="font-size:12px;font-weight:normal;">Examples: <select ng-model="selectedExample" ng-change="loadExample(selectedExample)"><option value="">-- Select --</option><option ng-repeat="ex in examples | filter:{mode: cpuMode}" value="{{ ex.file }}">{{ ex.name }}</option></select></span></h4>
+                        <h4 class="panel-title">Code <small>(<a href="./instruction-set.html" target="_blank" style="color: #337AB7">Instruction Set</a>)</small><span class="panel-ctrls"><a ng-click="togglePanelCollapse('code')" title="Collapse/Expand">{{ dock.collapsed['code'] ? '+' : '-' }}</a><a ng-click="togglePanelHidden('code')" title="Hide Panel">x</a></span><span class="pull-right" style="font-size:12px;font-weight:normal;">Examples: <select ng-model="selectedExample" ng-change="loadExample(selectedExample)"><option value="">-- Select --</option><option ng-repeat="ex in examples | filter:{mode: cpuMode}" value="{{ ex.file }}">{{ ex.name }}</option></select></span></h4>
                     </div>
-                    <div class="panel-body">
+                    <div ng-hide="dock.collapsed['code']" class="panel-body">
                         <form role="form">
                             <textarea id="sourceCode"
                                       class="form-control source-code"
@@ -51,12 +67,12 @@
                     </div>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-3">
-                <div class="panel panel-default">
+            <div id="dock-col2" dock-zone ng-class="dock.cols === 2 ? 'col-lg-7 col-md-7' : 'col-lg-3 col-md-3'">
+                <div class="panel panel-default" dock-panel data-panel-id="disasm" ng-hide="dock.hidden['disasm']">
                     <div class="panel-heading">
-                        <h4 class="panel-title">Disassembly</h4>
+                        <h4 class="panel-title">Disassembly<span class="panel-ctrls"><a ng-click="togglePanelCollapse('disasm')" title="Collapse/Expand">{{ dock.collapsed['disasm'] ? '+' : '-' }}</a><a ng-click="togglePanelHidden('disasm')" title="Hide Panel">x</a></span></h4>
                     </div>
-                    <div class="panel-body" style="padding:6px;">
+                    <div ng-hide="dock.collapsed['disasm']" class="panel-body" style="padding:6px;">
                         <div class="text-muted" ng-show="disassembly.length === 0" style="padding:6px;font-size:12px;">Click Assemble or Run to view disassembly.</div>
                         <div class="disasm-box source-code" ng-show="disassembly.length > 0">
                             <div class="disasm-line"
@@ -70,11 +86,11 @@
                         </div>
                     </div>
                 </div>
-                <div class="panel panel-default">
+                <div class="panel panel-default" dock-panel data-panel-id="labels" ng-hide="dock.hidden['labels']">
                     <div class="panel-heading">
-                        <h4 class="panel-title">Labels</h4>
+                        <h4 class="panel-title">Labels<span class="panel-ctrls"><a ng-click="togglePanelCollapse('labels')" title="Collapse/Expand">{{ dock.collapsed['labels'] ? '+' : '-' }}</a><a ng-click="togglePanelHidden('labels')" title="Hide Panel">x</a></span></h4>
                     </div>
-                    <div class="panel-body source-code">
+                    <div ng-hide="dock.collapsed['labels']" class="panel-body source-code">
                         <table class="table table-condensed table-striped codelabels">
                             <tr>
                                 <th>Name</th>
@@ -94,33 +110,33 @@
                     </div>
                 </div>
             </div>
-            <div class="col-lg-5 col-md-5">
-                <div class="panel panel-default">
+            <div id="dock-col3" dock-zone class="col-lg-5 col-md-5" ng-show="dock.cols === 3">
+                <div class="panel panel-default" dock-panel data-panel-id="input" ng-hide="dock.hidden['input']">
                     <div class="panel-heading">
-                        <h4 class="panel-title">Input</h4>
+                        <h4 class="panel-title">Input<span class="panel-ctrls"><a ng-click="togglePanelCollapse('input')" title="Collapse/Expand">{{ dock.collapsed['input'] ? '+' : '-' }}</a><a ng-click="togglePanelHidden('input')" title="Hide Panel">x</a></span></h4>
                     </div>
-                    <div class="panel-body source-code clearfix">
+                    <div ng-hide="dock.collapsed['input']" class="panel-body source-code clearfix">
                         <div style="float:left;" ng-repeat="i in input.data track by $index">
                             <span ng-click="setInputSwitch($index)" ng-class="{'input': true, 'input-on': i,'input-off': !i}">{{ $index }}</span>
                         </div>
                     </div>
                 </div>
-                <div class="panel panel-default">
+                <div class="panel panel-default" dock-panel data-panel-id="output" ng-hide="dock.hidden['output']">
                     <div class="panel-heading">
-                        <h4 class="panel-title">Output</h4>
+                        <h4 class="panel-title">Output<span class="panel-ctrls"><a ng-click="togglePanelCollapse('output')" title="Collapse/Expand">{{ dock.collapsed['output'] ? '+' : '-' }}</a><a ng-click="togglePanelHidden('output')" title="Hide Panel">x</a></span></h4>
                     </div>
-                    <div class="panel-body source-code">
+                    <div ng-hide="dock.collapsed['output']" class="panel-body source-code">
                         <div style="float:left;" class="output"
                              ng-repeat="m in memory.data | startFrom: outputStartIndex track by $index">
                             <span>{{ getChar(m) }}</span>
                         </div>
                     </div>
                 </div>
-                <div class="panel panel-default">
+                <div class="panel panel-default" dock-panel data-panel-id="cpumem" ng-hide="dock.hidden['cpumem']">
                     <div class="panel-heading">
-                        <h4 class="panel-title">CPU & Memory</h4>
+                        <h4 class="panel-title">CPU & Memory<span class="panel-ctrls"><a ng-click="togglePanelCollapse('cpumem')" title="Collapse/Expand">{{ dock.collapsed['cpumem'] ? '+' : '-' }}</a><a ng-click="togglePanelHidden('cpumem')" title="Hide Panel">x</a></span></h4>
                     </div>
-                    <div class="panel-body">
+                    <div ng-hide="dock.collapsed['cpumem']" class="panel-body">
                         <p class="text-muted">Registers / Flags</p>
                         <div ng-if="cpuMode === '8bit'">
                             <table class="table table-condensed table-bordered reg-table">

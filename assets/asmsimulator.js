@@ -1983,6 +1983,92 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     $scope.cpu8080 = cpu8080;
     $scope.cpuMode = '8bit';
     $scope.showAscii = true;
+    $scope.layoutMenuOpen = false;
+    $document.on('click', function (e) {
+        if ($scope.layoutMenuOpen && !e.target.closest('.dock-dropdown')) {
+            $scope.$apply(function () { $scope.layoutMenuOpen = false; });
+        }
+    });
+    $scope.panelMeta = [
+        { id: 'code', name: 'Code' },
+        { id: 'disasm', name: 'Disassembly' },
+        { id: 'labels', name: 'Labels' },
+        { id: 'input', name: 'Input' },
+        { id: 'output', name: 'Output' },
+        { id: 'cpumem', name: 'CPU & Memory' }
+    ];
+    var defaultDock = {
+        cols: 3,
+        zones: {
+            col1: ['code'],
+            col2: ['disasm', 'labels'],
+            col3: ['input', 'output', 'cpumem']
+        },
+        hidden: {},
+        collapsed: {}
+    };
+    $scope.dock = angular.copy(defaultDock);
+    try {
+        var saved = JSON.parse(localStorage.getItem('asmSimDockV1') || 'null');
+        if (saved && saved.zones) { $scope.dock = angular.extend(angular.copy(defaultDock), saved); }
+    } catch (e) {}
+
+    $scope.applyDockDom = function () {
+        angular.forEach(['col1', 'col2', 'col3'], function (zid) {
+            var zEl = document.getElementById('dock-' + zid);
+            var list = $scope.dock.zones[zid] || [];
+            if (!zEl) { return; }
+            for (var i = 0; i < list.length; i++) {
+                var card = document.querySelector('[data-panel-id="' + list.at(i) + '"]');
+                if (card) { zEl.appendChild(card); }
+            }
+        });
+    };
+
+    $scope.saveDockLayout = function () {
+        angular.forEach(['col1', 'col2', 'col3'], function (zid) {
+            var zEl = document.getElementById('dock-' + zid);
+            if (!zEl) { return; }
+            var kids = zEl.querySelectorAll('[data-panel-id]');
+            var arr = [];
+            for (var i = 0; i < kids.length; i++) { arr.push(kids.item(i).getAttribute('data-panel-id')); }
+            $scope.dock.zones[zid] = arr;
+        });
+        try { localStorage.setItem('asmSimDockV1', JSON.stringify($scope.dock)); } catch (e) {}
+    };
+
+    $scope.setDockCols = function (n) {
+        $scope.dock.cols = n;
+        if (n === 2) {
+            $scope.dock.zones.col1 = ['code', 'labels'];
+            $scope.dock.zones.col2 = ['disasm', 'input', 'output', 'cpumem'];
+            $scope.dock.zones.col3 = [];
+        } else {
+            $scope.dock.zones.col1 = ['code'];
+            $scope.dock.zones.col2 = ['disasm', 'labels'];
+            $scope.dock.zones.col3 = ['input', 'output', 'cpumem'];
+        }
+        $scope.applyDockDom();
+        $scope.saveDockLayout();
+    };
+
+    $scope.togglePanelHidden = function (pid) {
+        $scope.dock.hidden[pid] = !$scope.dock.hidden[pid];
+        $scope.saveDockLayout();
+    };
+
+    $scope.togglePanelCollapse = function (pid) {
+        $scope.dock.collapsed[pid] = !$scope.dock.collapsed[pid];
+        $scope.saveDockLayout();
+    };
+
+    $scope.resetDockLayout = function () {
+        $scope.dock = angular.copy(defaultDock);
+        $scope.applyDockDom();
+        try { localStorage.removeItem('asmSimDockV1'); } catch (e) {}
+    };
+
+    $timeout($scope.applyDockDom, 0);
     $scope.ramRows = [];
     for (var r = 0; r < 16; r++) { $scope.ramRows.push(r); }
     $scope.disassembly = [];
@@ -2387,5 +2473,66 @@ app.directive('selectLine', [function () {
             throw "Error input out of bounds";
         }
         input.setBit(index);
+    };
+}]);
+
+;app.directive('dockZone', [function () {
+    return {
+        restrict: 'A',
+        link: function (scope, elem, attrs) {
+            var el = elem.get(0);
+            el.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                el.classList.add('dock-over');
+            });
+            el.addEventListener('dragleave', function (e) {
+                if (!el.contains(e.relatedTarget)) {
+                    el.classList.remove('dock-over');
+                }
+            });
+            el.addEventListener('drop', function (e) {
+                e.preventDefault();
+                el.classList.remove('dock-over');
+                var pid = e.dataTransfer.getData('text/plain');
+                if (!pid) { return; }
+                var card = document.querySelector('[data-panel-id="' + pid + '"]');
+                if (!card) { return; }
+                var target = e.target.closest('[data-panel-id]');
+                if (target && target !== card && target.parentNode === el) {
+                    var rect = target.getBoundingClientRect();
+                    var after = (e.clientY - rect.top) > (rect.height / 2);
+                    el.insertBefore(card, after ? target.nextSibling : target);
+                } else {
+                    el.appendChild(card);
+                }
+                scope.$apply(function () { scope.saveDockLayout(); });
+            });
+        }
+    };
+}]);
+
+app.directive('dockPanel', [function () {
+    return {
+        restrict: 'A',
+        link: function (scope, elem, attrs) {
+            var el = elem.get(0);
+            var pid = attrs.panelId;
+            var hdr = el.querySelector('.panel-heading');
+            if (!hdr) { return; }
+            hdr.setAttribute('draggable', 'true');
+            hdr.addEventListener('dragstart', function (e) {
+                if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'A') {
+                    e.preventDefault();
+                    return;
+                }
+                e.dataTransfer.setData('text/plain', pid);
+                el.classList.add('dock-dragging');
+            });
+            hdr.addEventListener('dragend', function () {
+                el.classList.remove('dock-dragging');
+                var overs = document.querySelectorAll('.dock-over');
+                for (var i = 0; i < overs.length; i++) { overs.item(i).classList.remove('dock-over'); }
+            });
+        }
     };
 }]);

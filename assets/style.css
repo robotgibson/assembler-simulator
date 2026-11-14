@@ -315,3 +315,71 @@
 .codelabels {
     margin-bottom: 0;
 }
+
+[dock-zone] {
+    min-height: 80px;
+    border-radius: 4px;
+    transition: background-color 0.15s ease, outline 0.15s ease;
+}
+
+[dock-zone].dock-over {
+    background-color: #EEF6FC;
+    outline: 2px dashed #428BCA;
+}
+
+[dock-panel] .panel-heading {
+    cursor: move;
+    user-select: none;
+}
+
+[dock-panel].dock-dragging {
+    opacity: 0.55;
+}
+
+.panel-ctrls {
+    float: right;
+    margin-left: 8px;
+    font-weight: bold;
+}
+
+.panel-ctrls a {
+    color: #777;
+    cursor: pointer;
+    padding: 0 4px;
+    text-decoration: none;
+}
+
+.panel-ctrls a:hover {
+    color: #222;
+}
+
+.dock-menu {
+    position: absolute;
+    top: 42px;
+    left: 0;
+    z-index: 1050;
+    width: 185px;
+    background: #FFF;
+    border: 1px solid #CCC;
+    border-radius: 4px;
+    padding: 8px 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    font-size: 12px;
+}
+
+.dock-menu-hdr {
+    font-weight: bold;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.dock-chk {
+    display: block;
+    font-weight: normal;
+    margin: 2px 0;
+    cursor: pointer;
+}
+
+[dock-panel].ng-hide {
+    display: none !important;
+}
