@@ -124,7 +124,7 @@
                         <p style="margin-top:5px;">
                             <small>
                                 <span>Clock speed:</span>
-                                <select ng-model="speed" ng-options="item.speed as item.desc for item in speeds"></select>
+                                <span class="btn-group btn-group-xs"><button type="button" class="btn" ng-repeat="item in speeds" ng-class="speed === item.speed ? 'btn-primary' : 'btn-default'" ng-click="setSpeed(item.speed)">{{ item.desc }}</button></span>
                                 <span style="margin-left:5px;">Instructions:</span>
                                 <span ng-hide="labels != null">Show</span>
                                 <a ng-click="displayInstr = true"  ng-hide="displayInstr || labels == null">Show</a>
