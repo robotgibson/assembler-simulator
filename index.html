@@ -19,6 +19,10 @@
                     <button type="button" class="btn btn-default navbar-btn" ng-click="executeStep()" ng-disabled="isRunning"><span class="glyphicon glyphicon-forward"></span> Step</button>
                 </div>
                 <button type="button" class="btn btn-default navbar-btn" ng-click="reset()">Reset</button>
+                <div class="btn-group" style="margin-left:8px;">
+                    <button type="button" class="btn navbar-btn" ng-class="cpuMode === '8bit' ? 'btn-warning' : 'btn-default'" ng-click="setCpuMode('8bit')" ng-disabled="isRunning">8-bit</button>
+                    <button type="button" class="btn navbar-btn" ng-class="cpuMode === '8080' ? 'btn-warning' : 'btn-default'" ng-click="setCpuMode('8080')" ng-disabled="isRunning">8080</button>
+                </div>
             </div>
             <div class="navbar-header navbar-right">
                 <a class="navbar-brand" style="color:#FFFFFF">Simple 8-bit Assembler Simulator</a>
@@ -76,7 +80,7 @@
                     </div>
                     <div class="panel-body">
                         <p class="text-muted">Registers / Flags</p>
-                        <table class="table table-condensed table-striped">
+                        <table class="table table-condensed table-striped" ng-if="cpuMode === '8bit'">
                             <thead>
                                 <tr>
                                     <th style="text-align:center">A</th>
@@ -101,6 +105,44 @@
                                     <td ng-class="{'reg-changed': changed.zero}"><small>{{ cpu.zero | flag }}</small></td>
                                     <td ng-class="{'reg-changed': changed.carry}"><small>{{ cpu.carry | flag }}</small></td>
                                     <td ng-class="{'reg-changed': changed.fault}"><small>{{ cpu.fault | flag }}</small></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <table class="table table-condensed table-striped" ng-if="cpuMode === '8080'">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:center">A</th>
+                                    <th style="text-align:center">B</th>
+                                    <th style="text-align:center">C</th>
+                                    <th style="text-align:center">D</th>
+                                    <th style="text-align:center">E</th>
+                                    <th style="text-align:center">H</th>
+                                    <th style="text-align:center">L</th>
+                                    <th style="text-align:center">PC</th>
+                                    <th style="text-align:center">SP</th>
+                                    <th style="text-align:center">S</th>
+                                    <th style="text-align:center">Z</th>
+                                    <th style="text-align:center">P</th>
+                                    <th style="text-align:center">C</th>
+                                    <th style="text-align:center">F</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="text-align:center;" class="source-code">
+                                    <td ng-class="{'reg-changed': changed.gprA}"><small>{{ cpu8080.regs.at(7) | number:displayHex }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.gprB}"><small>{{ cpu8080.regs.at(0) | number:displayHex }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.gprC}"><small>{{ cpu8080.regs.at(1) | number:displayHex }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.gprD}"><small>{{ cpu8080.regs.at(2) | number:displayHex }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.gprE}"><small>{{ cpu8080.regs.at(3) | number:displayHex }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.gprH}"><small>{{ cpu8080.regs.at(4) | number:displayHex }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.gprL}"><small>{{ cpu8080.regs.at(5) | number:displayHex }}</small></td>
+                                    <td><div style="margin:auto;" class="marker marker-ip"><small>{{ cpu8080.ip | number:displayHex }}</small></div></td>
+                                    <td ng-class="{'reg-changed': changed.sp}"><div style="margin:auto;" class="marker marker-sp"><small>{{ cpu8080.sp | number:displayHex }}</small></div></td>
+                                    <td ng-class="{'reg-changed': changed.sign}"><small>{{ cpu8080.sign | flag }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.zero}"><small>{{ cpu8080.zero | flag }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.parity}"><small>{{ cpu8080.parity | flag }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.carry}"><small>{{ cpu8080.carry | flag }}</small></td>
+                                    <td ng-class="{'reg-changed': changed.fault}"><small>{{ cpu8080.fault | flag }}</small></td>
                                 </tr>
                             </tbody>
                         </table>

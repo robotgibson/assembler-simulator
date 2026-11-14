@@ -1585,11 +1585,306 @@ var app = angular.module('ASMSimulator', []);
     return input;
 }]);
 
-app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', 'cpu', 'memory', 'input', 'assembler', function ($document, $scope, $timeout, $http, opcodes, cpu, memory, input, assembler) {
+;app.service('assembler8080', [function () {
+    var regs = { B: 0, C: 1, D: 2, E: 3, H: 4, L: 5, M: 6, A: 7 };
+    var pairs = { B: 0, BC: 0, D: 1, DE: 1, H: 2, HL: 2, SP: 3 };
+    var pushPairs = { B: 0, BC: 0, D: 1, DE: 1, H: 2, HL: 2, PSW: 3 };
+    var aluOps = { ADD: 0, ADC: 1, SUB: 2, SBB: 3, ANA: 4, XRA: 5, ORA: 6, CMP: 7 };
+    var immAlu = { ADI: 0xC6, ACI: 0xCE, SUI: 0xD6, SBI: 0xDE, ANI: 0xE6, XRI: 0xEE, ORI: 0xF6, CPI: 0xFE };
+    var jmps = { JNZ: 0xC2, JMP: 0xC3, JZ: 0xCA, JNC: 0xD2, JC: 0xDA, JPO: 0xE2, JPE: 0xEA, JP: 0xF2, JM: 0xFA };
+    var calls = { CNZ: 0xC4, CALL: 0xCD, CZ: 0xCC, CNC: 0xD4, CC: 0xDC, CPO: 0xE4, CPE: 0xEC, CP: 0xF4, CM: 0xFC };
+    var rets = { RNZ: 0xC0, RET: 0xC9, RZ: 0xC8, RNC: 0xD0, RC: 0xD8, RPO: 0xE0, RPE: 0xE8, RP: 0xF0, RM: 0xF8 };
+    var singles = { NOP: 0x00, RLC: 0x07, RRC: 0x0F, RAL: 0x17, RAR: 0x1F, CMA: 0x2F, STC: 0x37, CMC: 0x3F, HLT: 0x76, XTHL: 0xE3, PCHL: 0xE9, XCHG: 0xEB, SPHL: 0xF9 };
+
+    function parseNum(tok, labels) {
+        tok = tok.trim();
+        if (/^'.'$/.test(tok)) { return tok.charCodeAt(1); }
+        if (/^0x[0-9a-fA-F]+$/.test(tok)) { return parseInt(tok.slice(2), 16); }
+        if (/^[0-9][0-9a-fA-F]*[hH]$/.test(tok)) { return parseInt(tok.slice(0, -1), 16); }
+        if (/^0o[0-7]+$/.test(tok)) { return parseInt(tok.slice(2), 8); }
+        if (/^[0-7]+[qQoO]$/.test(tok)) { return parseInt(tok.slice(0, -1), 8); }
+        if (new RegExp('^(0|1)+(b|B)$').test(tok)) { return parseInt(tok.slice(0, -1), 2); }
+        if (/^[0-9]+[dD]?$/.test(tok)) { return parseInt(tok.replace(/[dD]$/, ''), 10); }
+        var key = tok.toLowerCase();
+        if (labels && labels.hasOwnProperty(key)) { return labels.valueOf()[key]; }
+        return null;
+    }
+
+    function splitArgs(str) {
+        var out = [], cur = '', inQ = false, qCh = '';
+        for (var i = 0; i < str.length; i++) {
+            var ch = str.charAt(i);
+            if (inQ) { cur += ch; if (ch === qCh) { inQ = false; } }
+            else if (ch === '"' || ch === "'") { inQ = true; qCh = ch; cur += ch; }
+            else if (ch === ',') { out.push(cur.trim()); cur = ''; }
+            else { cur += ch; }
+        }
+        if (cur.trim() !== '') { out.push(cur.trim()); }
+        return out;
+    }
+
+    function stripComment(line) {
+        var inQ = false, qCh = '';
+        for (var i = 0; i < line.length; i++) {
+            var ch = line.charAt(i);
+            if (inQ) { if (ch === qCh) { inQ = false; } }
+            else if (ch === '"' || ch === "'") { inQ = true; qCh = ch; }
+            else if (ch === ';') { return line.slice(0, i); }
+        }
+        return line;
+    }
+
+    return {
+        go: function (input) {
+            var lines = input.split('\n');
+            var code = [], mapping = {}, labels = {}, fixups = [];
+            function emit8(v, li, isOp) {
+                if (code.length >= 256) { throw "Program exceeds 256 bytes of RAM"; }
+                if (isOp) { mapping[code.length] = li; }
+                code.push(v & 0xFF);
+            }
+            function emit16(expr, li) {
+                var val = parseNum(expr, labels), pos = code.length;
+                if (val === null) {
+                    fixups.push({ pos: pos, expr: expr, line: li });
+                    emit8(0, li, false); emit8(0, li, false);
+                } else {
+                    if (val < 0 || val > 65535) { throw "16-bit value out of range on line " + (li + 1); }
+                    emit8(val & 0xFF, li, false); emit8((val >> 8) & 0xFF, li, false);
+                }
+            }
+            function eval8(expr, li) {
+                var v = parseNum(expr, labels);
+                if (v === null) { throw "Unknown symbol or invalid number '" + expr + "' on line " + (li + 1); }
+                if (v < 0 || v > 255) { throw "8-bit value out of range (" + v + ") on line " + (li + 1); }
+                return v;
+            }
+            for (var li = 0; li < lines.length; li++) {
+                var clean = stripComment(lines.at(li)).trim();
+                if (!clean) { continue; }
+                var colon = clean.indexOf(':');
+                if (colon !== -1 && clean.indexOf('"') === -1 && clean.indexOf("'") === -1) {
+                    var lbl = clean.slice(0, colon).trim().toLowerCase();
+                    if (!/^[a-z_.][a-z0-9_.]*$/.test(lbl)) { throw "Invalid label '" + lbl + "' on line " + (li + 1); }
+                    if (labels.hasOwnProperty(lbl)) { throw "Duplicate label '" + lbl + "' on line " + (li + 1); }
+                    labels[lbl] = code.length;
+                    clean = clean.slice(colon + 1).trim();
+                    if (!clean) { continue; }
+                }
+                var sp = clean.search(/\s/);
+                var mnem = (sp === -1 ? clean : clean.slice(0, sp)).toUpperCase();
+                var argStr = sp === -1 ? '' : clean.slice(sp + 1).trim();
+                var args = argStr ? splitArgs(argStr) : [];
+                if (mnem === 'DB') {
+                    if (!args.length) { throw "DB requires at least one value on line " + (li + 1); }
+                    for (var ai = 0; ai < args.length; ai++) {
+                        var a = args.at(ai);
+                        if (a.length >= 2 && a.charAt(0) === '"' && a.charAt(a.length - 1) === '"') {
+                            for (var ci = 1; ci < a.length - 1; ci++) { emit8(a.charCodeAt(ci), li, false); }
+                        } else { emit8(eval8(a, li), li, false); }
+                    }
+                } else if (mnem === 'DS') {
+                    var cnt = eval8(args.at(0) || '', li);
+                    for (var di = 0; di < cnt; di++) { emit8(0, li, false); }
+                } else if (singles.hasOwnProperty(mnem)) { emit8(singles[mnem], li, true); }
+                else if (mnem === 'MOV') {
+                    var dst = (args.at(0) || '').toUpperCase(), src = (args.at(1) || '').toUpperCase();
+                    if (args.length !== 2 || !regs.hasOwnProperty(dst) || !regs.hasOwnProperty(src) || (dst === 'M' && src === 'M')) { throw "Invalid MOV operands on line " + (li + 1); }
+                    emit8(0x40 | (regs[dst] << 3) | regs[src], li, true);
+                } else if (mnem === 'MVI') {
+                    var dst = (args.at(0) || '').toUpperCase();
+                    if (args.length !== 2 || !regs.hasOwnProperty(dst)) { throw "Invalid MVI operands on line " + (li + 1); }
+                    emit8(0x06 | (regs[dst] << 3), li, true); emit8(eval8(args.at(1), li), li, false);
+                } else if (mnem === 'LXI') {
+                    var rp = (args.at(0) || '').toUpperCase();
+                    if (args.length !== 2 || !pairs.hasOwnProperty(rp)) { throw "Invalid LXI operands on line " + (li + 1); }
+                    emit8(0x01 | (pairs[rp] << 4), li, true); emit16(args.at(1), li);
+                } else if (mnem === 'LDAX' || mnem === 'STAX') {
+                    var rp = (args.at(0) || '').toUpperCase();
+                    if (rp !== 'B' && rp !== 'BC' && rp !== 'D' && rp !== 'DE') { throw mnem + " requires B or D on line " + (li + 1); }
+                    emit8((mnem === 'STAX' ? 0x02 : 0x0A) | (pairs[rp] << 4), li, true);
+                } else if (mnem === 'LDA' || mnem === 'STA' || mnem === 'LHLD' || mnem === 'SHLD') {
+                    var m16 = { SHLD: 0x22, LHLD: 0x2A, STA: 0x32, LDA: 0x3A };
+                    emit8(m16[mnem], li, true); emit16(args.at(0) || '', li);
+                } else if (mnem === 'INX' || mnem === 'DCX' || mnem === 'DAD') {
+                    var rp = (args.at(0) || '').toUpperCase();
+                    if (!pairs.hasOwnProperty(rp)) { throw "Invalid pair for " + mnem + " on line " + (li + 1); }
+                    emit8((mnem === 'INX' ? 0x03 : (mnem === 'DCX' ? 0x0B : 0x09)) | (pairs[rp] << 4), li, true);
+                } else if (mnem === 'INR' || mnem === 'DCR') {
+                    var r = (args.at(0) || '').toUpperCase();
+                    if (!regs.hasOwnProperty(r)) { throw "Invalid register for " + mnem + " on line " + (li + 1); }
+                    emit8((mnem === 'INR' ? 0x04 : 0x05) | (regs[r] << 3), li, true);
+                } else if (aluOps.hasOwnProperty(mnem)) {
+                    var r = (args.at(0) || '').toUpperCase();
+                    if (!regs.hasOwnProperty(r)) { throw "Invalid register for " + mnem + " on line " + (li + 1); }
+                    emit8(0x80 | (aluOps[mnem] << 3) | regs[r], li, true);
+                } else if (immAlu.hasOwnProperty(mnem)) { emit8(immAlu[mnem], li, true); emit8(eval8(args.at(0) || '', li), li, false); }
+                else if (jmps.hasOwnProperty(mnem)) { emit8(jmps[mnem], li, true); emit16(args.at(0) || '', li); }
+                else if (calls.hasOwnProperty(mnem)) { emit8(calls[mnem], li, true); emit16(args.at(0) || '', li); }
+                else if (rets.hasOwnProperty(mnem)) { emit8(rets[mnem], li, true); }
+                else if (mnem === 'PUSH' || mnem === 'POP') {
+                    var rp = (args.at(0) || '').toUpperCase();
+                    if (!pushPairs.hasOwnProperty(rp)) { throw "Invalid " + mnem + " pair on line " + (li + 1); }
+                    emit8((mnem === 'POP' ? 0xC1 : 0xC5) | (pushPairs[rp] << 4), li, true);
+                } else { throw "Unknown 8080 instruction '" + mnem + "' on line " + (li + 1); }
+            }
+            for (var fi = 0; fi < fixups.length; fi++) {
+                var fx = fixups.at(fi), target = parseNum(fx.expr, labels);
+                if (target === null) { throw "Undefined label '" + fx.expr + "' on line " + (fx.line + 1); }
+                code.splice(fx.pos, 2, target & 0xFF, (target >> 8) & 0xFF);
+            }
+            return { code: code, mapping: mapping, labels: labels };
+        }
+    };
+}]);
+;app.service('cpu8080', ['memory', function (memory) {
+    // Registers: B=0, C=1, D=2, E=3, H=4, L=5, M=6, A=7
+    var self = {
+        regs: new Array(8).fill(0),
+        ip: 0, sp: 231, zero: false, carry: false, sign: false, parity: false, fault: false,
+        reset: function () {
+            self.regs = new Array(8).fill(0);
+            self.ip = 0; self.sp = 231;
+            self.zero = false; self.carry = false; self.sign = false; self.parity = false; self.fault = false;
+        }
+    };
+    function setSZP(v) {
+        v &= 0xFF;
+        self.zero = (v === 0);
+        self.sign = ((v & 0x80) !== 0);
+        var p = v ^ (v >> 4); p ^= p >> 2; p ^= p >> 1;
+        self.parity = ((p & 1) === 0);
+        return v;
+    }
+    function getHL() { return ((self.regs.at(4) << 8) | self.regs.at(5)) & 0xFFFF; }
+    function setHL(v) { self.regs.splice(4, 2, (v >> 8) & 0xFF, v & 0xFF); }
+    function readReg(r) { return r === 6 ? memory.load(getHL()) : self.regs.at(r); }
+    function writeReg(r, val) {
+        val &= 0xFF;
+        if (r === 6) { memory.store(getHL(), val); } else { self.regs.splice(r, 1, val); }
+    }
+    function getPair(rp) {
+        if (rp === 0) { return (self.regs.at(0) << 8) | self.regs.at(1); }
+        if (rp === 1) { return (self.regs.at(2) << 8) | self.regs.at(3); }
+        return rp === 2 ? getHL() : self.sp;
+    }
+    function setPair(rp, val) {
+        val &= 0xFFFF;
+        if (rp === 0) { self.regs.splice(0, 2, (val >> 8) & 0xFF, val & 0xFF); }
+        else if (rp === 1) { self.regs.splice(2, 2, (val >> 8) & 0xFF, val & 0xFF); }
+        else if (rp === 2) { setHL(val); }
+        else { self.sp = val & 0xFF; }
+    }
+    function fetch8() { var b = memory.load(self.ip); self.ip = (self.ip + 1) & 0xFF; return b; }
+    function fetch16() { var lo = fetch8(), hi = fetch8(); return (hi << 8) | lo; }
+    function push16(val) {
+        if (self.sp < 2) { throw "Stack overflow"; }
+        self.sp -= 1; memory.store(self.sp, (val >> 8) & 0xFF);
+        self.sp -= 1; memory.store(self.sp, val & 0xFF);
+    }
+    function pop16() {
+        if (self.sp > 229) { throw "Stack underflow"; }
+        var lo = memory.load(self.sp); self.sp += 1;
+        var hi = memory.load(self.sp); self.sp += 1;
+        return (hi << 8) | lo;
+    }
+
+    function doAlu(op, val) {
+        var a = self.regs.at(7), c = self.carry ? 1 : 0, res = 0;
+        if (op === 0) { res = a + val; self.carry = res > 0xFF; writeReg(7, setSZP(res)); }
+        else if (op === 1) { res = a + val + c; self.carry = res > 0xFF; writeReg(7, setSZP(res)); }
+        else if (op === 2) { res = a - val; self.carry = res < 0; writeReg(7, setSZP(res)); }
+        else if (op === 3) { res = a - val - c; self.carry = res < 0; writeReg(7, setSZP(res)); }
+        else if (op === 4) { self.carry = false; writeReg(7, setSZP(a & val)); }
+        else if (op === 5) { self.carry = false; writeReg(7, setSZP(a ^ val)); }
+        else if (op === 6) { self.carry = false; writeReg(7, setSZP(a | val)); }
+        else if (op === 7) { res = a - val; self.carry = res < 0; setSZP(res); }
+    }
+    function checkCond(cc) {
+        if (cc === 0) { return !self.zero; }
+        if (cc === 1) { return self.zero; }
+        if (cc === 2) { return !self.carry; }
+        if (cc === 3) { return self.carry; }
+        if (cc === 4) { return !self.parity; }
+        if (cc === 5) { return self.parity; }
+        if (cc === 6) { return !self.sign; }
+        return self.sign;
+    }
+    self.step = function () {
+        if (self.fault) { throw "FAULT. Reset to CPU continue."; }
+        try {
+            var op = fetch8();
+            if (op === 0x00) { return true; }
+            if (op === 0x76) { return false; }
+            if ((op & 0xC0) === 0x40) { writeReg((op >> 3) & 7, readReg(op & 7)); return true; }
+            if ((op & 0xC0) === 0x80) { doAlu((op >> 3) & 7, readReg(op & 7)); return true; }
+            if ((op & 0xC7) === 0x06) { writeReg((op >> 3) & 7, fetch8()); return true; }
+            if ((op & 0xC7) === 0x04) { var r = (op >> 3) & 7; writeReg(r, setSZP(readReg(r) + 1)); return true; }
+            if ((op & 0xC7) === 0x05) { var r = (op >> 3) & 7; writeReg(r, setSZP(readReg(r) - 1)); return true; }
+            if ((op & 0xCF) === 0x01) { setPair((op >> 4) & 3, fetch16()); return true; }
+            if ((op & 0xCF) === 0x03) { var rp = (op >> 4) & 3; setPair(rp, getPair(rp) + 1); return true; }
+            if ((op & 0xCF) === 0x0B) { var rp = (op >> 4) & 3; setPair(rp, getPair(rp) - 1); return true; }
+            if ((op & 0xCF) === 0x09) { var s = getHL() + getPair((op >> 4) & 3); self.carry = s > 0xFFFF; setHL(s); return true; }
+            if (op === 0x02) { memory.store(getPair(0), self.regs.at(7)); return true; }
+            if (op === 0x12) { memory.store(getPair(1), self.regs.at(7)); return true; }
+            if (op === 0x0A) { writeReg(7, memory.load(getPair(0))); return true; }
+            if (op === 0x1A) { writeReg(7, memory.load(getPair(1))); return true; }
+            if (op === 0x22) { var a = fetch16(); memory.store(a, self.regs.at(5)); memory.store(a + 1, self.regs.at(4)); return true; }
+            if (op === 0x2A) { var a = fetch16(); writeReg(5, memory.load(a)); writeReg(4, memory.load(a + 1)); return true; }
+            if (op === 0x32) { memory.store(fetch16(), self.regs.at(7)); return true; }
+            if (op === 0x3A) { writeReg(7, memory.load(fetch16())); return true; }
+            if (op === 0x07) { var a = self.regs.at(7); self.carry = (a & 0x80) !== 0; writeReg(7, (a << 1) | (self.carry ? 1 : 0)); return true; }
+            if (op === 0x0F) { var a = self.regs.at(7); self.carry = (a & 1) !== 0; writeReg(7, (a >> 1) | (self.carry ? 0x80 : 0)); return true; }
+            if (op === 0x17) { var a = self.regs.at(7), c = self.carry ? 1 : 0; self.carry = (a & 0x80) !== 0; writeReg(7, (a << 1) | c); return true; }
+            if (op === 0x1F) { var a = self.regs.at(7), c = self.carry ? 0x80 : 0; self.carry = (a & 1) !== 0; writeReg(7, (a >> 1) | c); return true; }
+            if (op === 0x2F) { writeReg(7, ~self.regs.at(7)); return true; }
+            if (op === 0x37) { self.carry = true; return true; }
+            if (op === 0x3F) { self.carry = !self.carry; return true; }
+            if ((op & 0xC7) === 0xC6) { doAlu((op >> 3) & 7, fetch8()); return true; }
+            if (op === 0xC3) { var t = fetch16(); if (t >= 256) { throw "PC outside memory"; } self.ip = t; return true; }
+            if ((op & 0xC7) === 0xC2) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= 256) { throw "PC outside memory"; } self.ip = t; } return true; }
+            if (op === 0xCD) { var t = fetch16(); if (t >= 256) { throw "PC outside memory"; } push16(self.ip); self.ip = t; return true; }
+            if ((op & 0xC7) === 0xC4) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= 256) { throw "PC outside memory"; } push16(self.ip); self.ip = t; } return true; }
+            if (op === 0xC9) { self.ip = pop16() & 0xFF; return true; }
+            if ((op & 0xC7) === 0xC0) { if (checkCond((op >> 3) & 7)) { self.ip = pop16() & 0xFF; } return true; }
+            if ((op & 0xCF) === 0xC5) {
+                var rp = (op >> 4) & 3;
+                if (rp === 3) { push16((self.regs.at(7) << 8) | ((self.sign?0x80:0)|(self.zero?0x40:0)|(self.parity?0x04:0)|2|(self.carry?1:0))); }
+                else { push16(getPair(rp)); }
+                return true;
+            }
+            if ((op & 0xCF) === 0xC1) {
+                var rp = (op >> 4) & 3, v = pop16();
+                if (rp === 3) { writeReg(7, (v >> 8) & 0xFF); var f = v & 0xFF; self.sign=(f&0x80)!==0; self.zero=(f&0x40)!==0; self.parity=(f&0x04)!==0; self.carry=(f&1)!==0; }
+                else { setPair(rp, v); }
+                return true;
+            }
+            if (op === 0xEB) { var d = self.regs.at(2), e = self.regs.at(3); self.regs.splice(2, 2, self.regs.at(4), self.regs.at(5)); self.regs.splice(4, 2, d, e); return true; }
+            if (op === 0xE3) { var lo = memory.load(self.sp), hi = memory.load(self.sp + 1); memory.store(self.sp, self.regs.at(5)); memory.store(self.sp + 1, self.regs.at(4)); setHL((hi << 8) | lo); return true; }
+            if (op === 0xE9) { self.ip = getHL() & 0xFF; return true; }
+            if (op === 0xF9) { self.sp = getHL() & 0xFF; return true; }
+            throw "Invalid 8080 opcode: 0x" + op.toString(16).toUpperCase();
+        } catch (e) { self.fault = true; throw e; }
+    };
+    return self;
+}]);
+
+app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', 'cpu', 'cpu8080', 'memory', 'input', 'assembler', 'assembler8080', function ($document, $scope, $timeout, $http, opcodes, cpu, cpu8080, memory, input, assembler, assembler8080) {
     $scope.displayInstr = false;
     $scope.memory = memory;
     $scope.cpu = cpu;
     $scope.input = input;
+    $scope.cpu8080 = cpu8080;
+    $scope.cpuMode = '8bit';
+    var defaultCode8 = "; Simple example\n; Writes Hello World to the output\n\n\tJMP start\nhello: DB \"Hello World!\" ; Variable\n       DB 0\t; String terminator\n\nstart:\n\tMOV C, hello    ; Point to var \n\tMOV D, 232\t; Point to output\n\tCALL print\n        HLT             ; Stop execution\n\nprint:\t\t\t; print(C:*from, D:*to)\n\tPUSH A\n\tPUSH B\n\tMOV B, 0\n.loop:\n\tMOV A, [C]\t; Get char from var\n\tMOV [D], A\t; Write to output\n\tINC C\n\tINC D  \n\tCMP B, [C]\t; Check if end\n\tJNZ .loop\t; jump if not\n\n\tPOP B\n\tPOP A\n\tRET";
+    var defaultCode8080 = "; Intel 8080 Hello World example\n; Writes \"Hello World!\" to memory-mapped output (232 / 0xE8)\n\n        JMP start\nhello:  DB \"Hello World!\"\n        DB 0\n\nstart:\n        LXI H, hello    ; HL points to source string\n        LXI D, 232      ; DE points to console output (0xE8)\n        CALL print\n        HLT\n\nprint:\n        MOV A, M        ; Load byte at [HL] into A\n        CPI 0           ; Check for null terminator\n        RZ              ; Return if zero\n        STAX D          ; Store A at [DE]\n        INX H           ; HL++\n        INX D           ; DE++\n        JMP print";
+    $scope.setCpuMode = function (mode) {
+        if ($scope.cpuMode === mode) { return; }
+        $scope.stop();
+        $scope.cpuMode = mode;
+        $scope.code = (mode === '8080') ? defaultCode8080 : defaultCode8;
+        $scope.reset();
+    };
     $scope.error = '';
     $scope.displayHex = true;
     $scope.displayA = false;
@@ -1674,7 +1969,8 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     var opcodeNames = {};
     angular.forEach(opcodes, function (v, k) { opcodeNames[v] = k; });
     $scope.examples = [
-        { name: 'Hello World', file: 'examples/hello-world.asm' },
+        { name: 'Hello World (8-bit)', file: 'examples/hello-world.asm', mode: '8bit' },
+        { name: 'Hello World (8080)', file: 'examples/hello-world-8080.asm', mode: '8080' },
         { name: 'Switches & 16-bit Math', file: 'examples/switches-and-16bit-math.asm' },
         { name: 'Simple Example 1', file: 'examples/simple-example-1.asm' },
         { name: 'Simple Example 2', file: 'examples/simple-example-2.asm' },
@@ -1685,6 +1981,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
         if (!file) { return; }
         $http.get(file).then(function (resp) {
             $scope.stop();
+            if (file.indexOf('8080') !== -1) { $scope.cpuMode = '8080'; } else if (file.indexOf('hello-world.asm') !== -1 || file.indexOf('simple-example') !== -1 || file.indexOf('switches-and') !== -1) { $scope.cpuMode = '8bit'; }
             $scope.code = resp.data;
             $scope.reset();
         }, function () {
@@ -1697,7 +1994,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
         var hv = ('0' + val.toString(16).toUpperCase()).slice(-2);
         var tip = 'Addr: 0x' + ha + ' (' + idx + ') | Val: 0x' + hv + ' (' + val + ')';
         if (val >= 32 && val <= 126) { tip += " | Char: '" + String.fromCharCode(val) + "'"; }
-        if ($scope.isInstruction(idx) && opcodeNames.hasOwnProperty(val)) { tip += ' | Op: ' + opcodeNames[val]; }
+        if ($scope.cpuMode === '8bit' && $scope.isInstruction(idx) && opcodeNames.hasOwnProperty(val)) { tip += ' | Op: ' + opcodeNames[val]; }
         return tip;
     };
     $scope.code = "; Simple example\n; Writes Hello World to the output\n\n\tJMP start\nhello: DB \"Hello World!\" ; Variable\n       DB 0\t; String terminator\n\nstart:\n\tMOV C, hello    ; Point to var \n\tMOV D, 232\t; Point to output\n\tCALL print\n        HLT             ; Stop execution\n\nprint:\t\t\t; print(C:*from, D:*to)\n\tPUSH A\n\tPUSH B\n\tMOV B, 0\n.loop:\n\tMOV A, [C]\t; Get char from var\n\tMOV [D], A\t; Write to output\n\tINC C\n\tINC D  \n\tCMP B, [C]\t; Check if end\n\tJNZ .loop\t; jump if not\n\n\tPOP B\n\tPOP A\n\tRET";
@@ -1712,6 +2009,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
 		delete $scope.mapping;
 
         cpu.reset();
+        cpu8080.reset();
         memory.reset();
         $scope.error = '';
         $scope.selectedLine = -1;
@@ -1724,14 +2022,28 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
         }
 
         try {
-            var pG = cpu.gpr.slice(), pS = cpu.sp, pZ = cpu.zero, pC = cpu.carry, pF = cpu.fault;
+            var activeCpu = ($scope.cpuMode === '8080') ? cpu8080 : cpu;
+            var pG = ($scope.cpuMode === '8080') ? cpu8080.regs.slice() : cpu.gpr.slice();
+            var pS = activeCpu.sp, pZ = activeCpu.zero, pC = activeCpu.carry, pF = activeCpu.fault;
+            var pSign = !!cpu8080.sign, pPar = !!cpu8080.parity;
             // Execute
-            var res = cpu.step();
-            $scope.changed = { gprA: cpu.gpr.at(0)!==pG.at(0), gprB: cpu.gpr.at(1)!==pG.at(1), gprC: cpu.gpr.at(2)!==pG.at(2), gprD: cpu.gpr.at(3)!==pG.at(3), sp: cpu.sp!==pS, zero: cpu.zero!==pZ, carry: cpu.carry!==pC, fault: cpu.fault!==pF };
+            var res = activeCpu.step();
+            if ($scope.cpuMode === '8080') {
+                $scope.changed = {
+                    gprA: cpu8080.regs.at(7)!==pG.at(7), gprB: cpu8080.regs.at(0)!==pG.at(0),
+                    gprC: cpu8080.regs.at(1)!==pG.at(1), gprD: cpu8080.regs.at(2)!==pG.at(2),
+                    gprE: cpu8080.regs.at(3)!==pG.at(3), gprH: cpu8080.regs.at(4)!==pG.at(4),
+                    gprL: cpu8080.regs.at(5)!==pG.at(5), sp: cpu8080.sp!==pS,
+                    zero: cpu8080.zero!==pZ, carry: cpu8080.carry!==pC,
+                    sign: cpu8080.sign!==pSign, parity: cpu8080.parity!==pPar, fault: cpu8080.fault!==pF
+                };
+            } else {
+                $scope.changed = { gprA: cpu.gpr.at(0)!==pG.at(0), gprB: cpu.gpr.at(1)!==pG.at(1), gprC: cpu.gpr.at(2)!==pG.at(2), gprD: cpu.gpr.at(3)!==pG.at(3), sp: cpu.sp!==pS, zero: cpu.zero!==pZ, carry: cpu.carry!==pC, fault: cpu.fault!==pF };
+            }
 
             // Mark in code
-            if (cpu.ip in $scope.mapping) {
-                $scope.selectedLine = $scope.mapping[cpu.ip];
+            if (activeCpu.ip in $scope.mapping) {
+                $scope.selectedLine = $scope.mapping[activeCpu.ip];
             }
 
             return res;
@@ -1787,7 +2099,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
             $scope.reset();
 			$scope.displayInstr = true;
 
-            var assembly = assembler.go($scope.code);
+            var assembly = ($scope.cpuMode === '8080') ? assembler8080.go($scope.code) : assembler.go($scope.code);
             $scope.mapping = assembly.mapping;
             var binary = assembly.code;
             $scope.labels = assembly.labels;
