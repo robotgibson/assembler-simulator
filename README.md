@@ -1,5 +1,9 @@
 # Simple 8-bit Assembler Simulator
 
+![Runtime](https://img.shields.io/badge/runtime-HTML5%20%2F%20JS-orange?logo=html5&logoColor=white)
+![Build](https://img.shields.io/badge/build-Node.js%20%2B%20Grunt-brightgreen?logo=node.js&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 A browser-based simulator providing a simplified NASM-like assembler syntax for an 8-bit x86-inspired educational CPU. Click **Instruction Set** inside the simulator to view the full opcode and architecture reference.
 
 #### [TRY IT ONLINE](https://robotgibson.github.io/assembler-simulator/)
