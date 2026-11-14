@@ -44,6 +44,18 @@
     background-color: #F8DCB4;
 }
 
+.ram-header {
+    float: left;
+    width: 1.8em;
+    text-align: center;
+    color: #999;
+    font-weight: bold;
+}
+
+.ram-corner {
+    height: 1.4em;
+}
+
 .memory-block {
     width: 1.8em;
     display: inline-block;

@@ -29,13 +29,13 @@ var app = angular.module('ASMSimulator', []);
 
             // Allowed formats: 200, 200d, 0xA4, 0o48, 101b
             var parseNumber = function (input) {
-                if (input.slice(0, 2) === "0x") {
+                if (/^0x[0-9a-fA-F]+$/.test(input)) {
                     return parseInt(input.slice(2), 16);
-                } else if (input.slice(0, 2) === "0o") {
+                } else if (/^0o[0-7]+$/.test(input)) {
                     return parseInt(input.slice(2), 8);
-                } else if (input.slice(input.length - 1) === "b") {
+                } else if (/^[01]+b$/.test(input)) {
                     return parseInt(input.slice(0, input.length - 1), 2);
-                } else if (input.slice(input.length - 1) === "d") {
+                } else if (/^[0-9]+d$/.test(input)) {
                     return parseInt(input.slice(0, input.length - 1), 10);
                 } else if (regexNum.exec(input)) {
                     return parseInt(input, 10);
@@ -776,11 +776,13 @@ var app = angular.module('ASMSimulator', []);
                     if (value >= 256) {
                         self.carry = true;
                         value = value % 256;
-                    } else if (value === 0) {
-                        self.zero = true;
                     } else if (value < 0) {
                         self.carry = true;
-                        value = 256 - (-value) % 256;
+                        value = (256 - (-value) % 256) % 256;
+                    }
+
+                    if (value === 0) {
+                        self.zero = true;
                     }
 
                     return value;
@@ -1334,7 +1336,7 @@ var app = angular.module('ASMSimulator', []);
 
                     case opcodes.NOT_REG:
                         regTo = checkGPR(memory.load(++self.ip));
-                        self.gpr[regTo] = checkOperation(~self.gpr[regTo]);
+                        self.gpr[regTo] = checkOperation((~self.gpr[regTo]) & 0xFF);
                         self.ip++;
                         break;
 

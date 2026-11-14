@@ -35,7 +35,7 @@
 Decimal: 200
 Decimal: 200d
 Hex: 0xA4
-Octal: 0o48
+Octal: 0o47
 Binary: 101b
 </pre>
         <p>It is possible to define a number using a character or multiple numbers (see instruction <i>DB</i>) by using a string.</p>
@@ -44,7 +44,7 @@ Character: 'A'
 String: "Hello World!"
 </pre>
         <p>Operands can either be one of the four general purpose registers, stack pointer register, a memory address or a constant.
-		Stack pointer register can only be used as operand in MOV, ADD, SUB, CMP, INC and DEC instructions.
+		Stack pointer register can only be used as operand in MOV, ADD, ADDC, SUB, SUBC, CMP, INC and DEC instructions.
 		Instead of defining an address as a constant or by using a register you can use labels. The assembler will then replace the label with the corresponding constant.</p>
 <pre>
 General purpose (GP) register: A, B, C, D
@@ -139,6 +139,13 @@ CMP reg, reg
 CMP reg, address
 CMP reg, constant
 </pre>
+        <h4>Flags</h4>
+        <p>The CPU tracks three status flags shown in the Registers / Flags table:</p>
+        <ul>
+            <li><b>Z (Zero):</b> Set to TRUE when the result of an arithmetic, logical, or comparison operation is 0.</li>
+            <li><b>C (Carry):</b> Set to TRUE when an arithmetic operation overflows (&gt;= 256) or underflows (&lt; 0), or when a bit is shifted out.</li>
+            <li><b>F (Fault):</b> Set to TRUE when the CPU encounters a runtime error (such as division by zero, an invalid opcode, or stack overflow/underflow), halting execution until Reset is pressed.</li>
+        </ul>
         <h4>Jumps</h4>
         <b>JMP - Unconditional jump</b>
         <p>Let the instruction pointer do a unconditional jump to the defined address.</p>
