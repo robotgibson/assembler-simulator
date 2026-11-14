@@ -269,6 +269,23 @@ var app = angular.module('ASMSimulator', []);
 
                                     code.push(opCode, p1.value, p2.value);
                                     break;
+                                case 'ADDC':
+                                    p1 = getValue(match[op1_group]);
+                                    p2 = getValue(match[op2_group]);
+
+                                    if (p1.type === "register" && p2.type === "register")
+                                        opCode = opcodes.ADDC_REG_TO_REG;
+                                    else if (p1.type === "register" && p2.type === "regaddress")
+                                        opCode = opcodes.ADDC_REGADDRESS_TO_REG;
+                                    else if (p1.type === "register" && p2.type === "address")
+                                        opCode = opcodes.ADDC_ADDRESS_TO_REG;
+                                    else if (p1.type === "register" && p2.type === "number")
+                                        opCode = opcodes.ADDC_NUMBER_TO_REG;
+                                    else
+                                        throw "ADDC does not support this operands";
+
+                                    code.push(opCode, p1.value, p2.value);
+                                    break;
 
                                 case 'SUB':
                                     p1 = getValue(match[op1_group]);
@@ -284,6 +301,23 @@ var app = angular.module('ASMSimulator', []);
                                         opCode = opcodes.SUB_NUMBER_FROM_REG;
                                     else
                                         throw "SUB does not support this operands";
+
+                                    code.push(opCode, p1.value, p2.value);
+                                    break;
+                                case 'SUBC':
+                                    p1 = getValue(match[op1_group]);
+                                    p2 = getValue(match[op2_group]);
+
+                                    if (p1.type === "register" && p2.type === "register")
+                                        opCode = opcodes.SUBC_REG_FROM_REG;
+                                    else if (p1.type === "register" && p2.type === "regaddress")
+                                        opCode = opcodes.SUBC_REGADDRESS_FROM_REG;
+                                    else if (p1.type === "register" && p2.type === "address")
+                                        opCode = opcodes.SUBC_ADDRESS_FROM_REG;
+                                    else if (p1.type === "register" && p2.type === "number")
+                                        opCode = opcodes.SUBC_NUMBER_FROM_REG;
+                                    else
+                                        throw "SUBC does not support this operands";
 
                                     code.push(opCode, p1.value, p2.value);
                                     break;
@@ -788,7 +822,7 @@ var app = angular.module('ASMSimulator', []);
                     throw "Instruction pointer is outside of memory";
                 }
                 
-                var regTo, regFrom, memFrom, memTo, number;
+                var regTo, regFrom, memFrom, memTo, number, carryVal;
                 var instr = memory.load(self.ip);
                 switch(instr) {
                     case opcodes.NONE:
@@ -877,6 +911,34 @@ var app = angular.module('ASMSimulator', []);
                         setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) + number));
                         self.ip++;
                         break;
+                    case opcodes.ADDC_REG_TO_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        regFrom = checkGPR_SP(memory.load(++self.ip));
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) + getGPR_SP(regFrom) + carryVal));
+                        self.ip++;
+                        break;
+                    case opcodes.ADDC_REGADDRESS_TO_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        regFrom = memory.load(++self.ip);
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) + memory.load(indirectRegisterAddress(regFrom)) + carryVal));
+                        self.ip++;
+                        break;
+                    case opcodes.ADDC_ADDRESS_TO_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        memFrom = memory.load(++self.ip);
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) + memory.load(memFrom) + carryVal));
+                        self.ip++;
+                        break;
+                    case opcodes.ADDC_NUMBER_TO_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        number = memory.load(++self.ip);
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) + number + carryVal));
+                        self.ip++;
+                        break;
 
                     case opcodes.SUB_REG_FROM_REG:
                         regTo = checkGPR_SP(memory.load(++self.ip));
@@ -903,6 +965,34 @@ var app = angular.module('ASMSimulator', []);
                         regTo = checkGPR_SP(memory.load(++self.ip));
                         number = memory.load(++self.ip);
                         setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) - number));
+                        self.ip++;
+                        break;
+                    case opcodes.SUBC_REG_FROM_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        regFrom = checkGPR_SP(memory.load(++self.ip));
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) - getGPR_SP(regFrom) - carryVal));
+                        self.ip++;
+                        break;
+                    case opcodes.SUBC_REGADDRESS_FROM_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        regFrom = memory.load(++self.ip);
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) - memory.load(indirectRegisterAddress(regFrom)) - carryVal));
+                        self.ip++;
+                        break;
+                    case opcodes.SUBC_ADDRESS_FROM_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        memFrom = memory.load(++self.ip);
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) - memory.load(memFrom) - carryVal));
+                        self.ip++;
+                        break;
+                    case opcodes.SUBC_NUMBER_FROM_REG:
+                        regTo = checkGPR_SP(memory.load(++self.ip));
+                        number = memory.load(++self.ip);
+                        carryVal = self.carry ? 1 : 0;
+                        setGPR_SP(regTo,checkOperation(getGPR_SP(regTo) - number - carryVal));
                         self.ip++;
                         break;
 
@@ -1449,7 +1539,15 @@ var app = angular.module('ASMSimulator', []);
         SHR_REGADDRESS_WITH_REG: 95,
         SHR_ADDRESS_WITH_REG: 96,
         SHR_NUMBER_WITH_REG: 97,
-        NOP: 98
+        NOP: 98,
+        ADDC_REG_TO_REG: 99,
+        ADDC_REGADDRESS_TO_REG: 100,
+        ADDC_ADDRESS_TO_REG: 101,
+        ADDC_NUMBER_TO_REG: 102,
+        SUBC_REG_FROM_REG: 103,
+        SUBC_REGADDRESS_FROM_REG: 104,
+        SUBC_ADDRESS_FROM_REG: 105,
+        SUBC_NUMBER_FROM_REG: 106
     };
 
     return opcodes;
