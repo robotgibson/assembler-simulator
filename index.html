@@ -218,20 +218,27 @@
                             </div>
                         </div>
                         <div class="ram-toolbar">
-                            <span class="text-muted">RAM</span>
+                            <span class="text-muted" style="margin-right:6px;">RAM</span>
+                            <select class="ram-size-sel" ng-model="ramSize" ng-options="s.bytes as s.label for s in ramSizes" ng-change="setRamSize(ramSize)" ng-disabled="isRunning" title="Select RAM size"></select>
+                            <span class="ram-pager" ng-show="ramSize > 4096">
+                                <button type="button" class="btn btn-xs btn-default" ng-click="stepRamWindow(-4096)" ng-disabled="ramWindowBase === 0" title="Previous 4K">&laquo;</button>
+                                <input type="text" class="ram-jump-in source-code" ng-model="ramJumpHex" maxlength="6" placeholder="0000" title="Hex address">
+                                <button type="button" class="btn btn-xs btn-default" ng-click="jumpRamAddr(ramJumpHex)">Go</button>
+                                <button type="button" class="btn btn-xs btn-default" ng-click="stepRamWindow(4096)" ng-disabled="ramWindowBase + 4096 >= ramSize" title="Next 4K">&raquo;</button>
+                            </span>
                             <button type="button" class="btn btn-xs pull-right" ng-class="showAscii ? 'btn-primary' : 'btn-default'" ng-click="showAscii = !showAscii">ASCII: {{ showAscii ? 'On' : 'Off' }}</button>
                         </div>
-                        <div class="ram-dump source-code">
+                        <div class="ram-dump source-code" ng-class="{'ram-wide-addr': ramSize > 65536}">
                             <div class="ram-dump-row ram-dump-head">
                                 <span class="ram-addr"></span>
-                                <span class="ram-hex-cells"><span class="ram-col-hdr" ng-repeat="col in ramRows">{{ col.toString(16).toUpperCase() }}</span></span>
+                                <span class="ram-hex-cells"><span class="ram-col-hdr" ng-repeat="col in ramCols">{{ col.toString(16).toUpperCase() }}</span></span>
                                 <span class="ram-ascii-col" ng-show="showAscii">ASCII</span>
                             </div>
-                            <div class="ram-dump-row" ng-repeat="row in ramRows">
-                                <span class="ram-addr">{{ row.toString(16).toUpperCase() }}0:</span>
+                            <div class="ram-dump-row" ng-repeat="row in ramVisibleRows track by row">
+                                <span class="ram-addr">{{ formatRowAddr(row) }}</span>
                                 <span class="ram-hex-cells">
                                     <span class="memory-block"
-                                          ng-repeat="col in ramRows"
+                                          ng-repeat="col in ramCols"
                                           ng-init="idx = row * 16 + col"
                                           title="{{ getMemoryTooltip(idx) }}"
                                           ng-class="getMemoryCellCss(idx)">
@@ -241,7 +248,7 @@
                                         </span>
                                     </span>
                                 </span>
-                                <span class="ram-ascii-col" ng-show="showAscii"><span class="ram-ascii-ch" ng-repeat="col in ramRows track by $index" ng-class="getMemoryCellCss(row * 16 + col)">{{ getAsciiChar(memory.data.at(row * 16 + col)) }}</span></span>
+                                <span class="ram-ascii-col" ng-show="showAscii"><span class="ram-ascii-ch" ng-repeat="col in ramCols track by $index" ng-class="getMemoryCellCss(row * 16 + col)">{{ getAsciiChar(memory.data.at(row * 16 + col)) }}</span></span>
                             </div>
                         </div>
                         <p style="margin-top:5px;">

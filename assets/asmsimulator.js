@@ -1431,6 +1431,10 @@ var app = angular.module('ASMSimulator', []);
     var memory = {
         data: Array(256),
         lastAccess: -1,
+        resize: function (newSize) {
+            this.data = new Array(newSize);
+            this.reset();
+        },
         load: function (address) {
             var self = this;
 
@@ -1450,6 +1454,10 @@ var app = angular.module('ASMSimulator', []);
 
             self.lastAccess = address;
             self.data[address] = value;
+        },
+        resize: function (size) {
+            this.data = new Array(size);
+            this.reset();
         },
         reset: function () {
             var self = this;
@@ -1571,14 +1579,14 @@ var app = angular.module('ASMSimulator', []);
                     byte += Math.pow(2, i);
                 }
             }
-            memory.store(255, byte);
+            memory.store(memory.data.length - 1, byte);
             byte = 0;
             for (; i < 16; ++i) {
                 if (this.data[i]) {
                     byte += Math.pow(2, i - 8);
                 }
             }
-            memory.store(254, byte);
+            memory.store(memory.data.length - 2, byte);
         }
     };
     input.reset();
@@ -1639,7 +1647,7 @@ var app = angular.module('ASMSimulator', []);
             var lines = input.split('\n');
             var code = [], mapping = {}, labels = {}, fixups = [];
             function emit8(v, li, isOp) {
-                if (code.length >= 256) { throw "Program exceeds 256 bytes of RAM"; }
+                if (code.length >= 65536) { throw "Program exceeds 64K address space"; }
                 if (isOp) { mapping[code.length] = li; }
                 code.push(v & 0xFF);
             }
@@ -1774,9 +1782,9 @@ var app = angular.module('ASMSimulator', []);
         if (rp === 0) { self.regs.splice(0, 2, (val >> 8) & 0xFF, val & 0xFF); }
         else if (rp === 1) { self.regs.splice(2, 2, (val >> 8) & 0xFF, val & 0xFF); }
         else if (rp === 2) { setHL(val); }
-        else { self.sp = val & 0xFF; }
+        else { self.sp = val & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); }
     }
-    function fetch8() { var b = memory.load(self.ip); self.ip = (self.ip + 1) & 0xFF; return b; }
+    function fetch8() { var b = memory.load(self.ip); self.ip = (self.ip + 1) & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return b; }
     function fetch16() { var lo = fetch8(), hi = fetch8(); return (hi << 8) | lo; }
     function push16(val) {
         if (self.sp < 2) { throw "Stack overflow"; }
@@ -1784,7 +1792,7 @@ var app = angular.module('ASMSimulator', []);
         self.sp -= 1; memory.store(self.sp, val & 0xFF);
     }
     function pop16() {
-        if (self.sp > 229) { throw "Stack underflow"; }
+        var maxSp = (memory.data.length === 256) ? 229 : (Math.min(memory.data.length, 65536) - 2); if (self.sp > maxSp) { throw "Stack underflow"; }
         var lo = memory.load(self.sp); self.sp += 1;
         var hi = memory.load(self.sp); self.sp += 1;
         return (hi << 8) | lo;
@@ -1842,12 +1850,12 @@ var app = angular.module('ASMSimulator', []);
             if (op === 0x37) { self.carry = true; return true; }
             if (op === 0x3F) { self.carry = !self.carry; return true; }
             if ((op & 0xC7) === 0xC6) { doAlu((op >> 3) & 7, fetch8()); return true; }
-            if (op === 0xC3) { var t = fetch16(); if (t >= 256) { throw "PC outside memory"; } self.ip = t; return true; }
-            if ((op & 0xC7) === 0xC2) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= 256) { throw "PC outside memory"; } self.ip = t; } return true; }
-            if (op === 0xCD) { var t = fetch16(); if (t >= 256) { throw "PC outside memory"; } push16(self.ip); self.ip = t; return true; }
-            if ((op & 0xC7) === 0xC4) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= 256) { throw "PC outside memory"; } push16(self.ip); self.ip = t; } return true; }
-            if (op === 0xC9) { self.ip = pop16() & 0xFF; return true; }
-            if ((op & 0xC7) === 0xC0) { if (checkCond((op >> 3) & 7)) { self.ip = pop16() & 0xFF; } return true; }
+            if (op === 0xC3) { var t = fetch16(); if (t >= memory.data.length) { throw "PC outside memory"; } self.ip = t; return true; }
+            if ((op & 0xC7) === 0xC2) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= memory.data.length) { throw "PC outside memory"; } self.ip = t; } return true; }
+            if (op === 0xCD) { var t = fetch16(); if (t >= memory.data.length) { throw "PC outside memory"; } push16(self.ip); self.ip = t; return true; }
+            if ((op & 0xC7) === 0xC4) { var t = fetch16(); if (checkCond((op >> 3) & 7)) { if (t >= memory.data.length) { throw "PC outside memory"; } push16(self.ip); self.ip = t; } return true; }
+            if (op === 0xC9) { self.ip = pop16() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
+            if ((op & 0xC7) === 0xC0) { if (checkCond((op >> 3) & 7)) { self.ip = pop16() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); } return true; }
             if ((op & 0xCF) === 0xC5) {
                 var rp = (op >> 4) & 3;
                 if (rp === 3) { push16((self.regs.at(7) << 8) | ((self.sign?0x80:0)|(self.zero?0x40:0)|(self.parity?0x04:0)|2|(self.carry?1:0))); }
@@ -1862,8 +1870,8 @@ var app = angular.module('ASMSimulator', []);
             }
             if (op === 0xEB) { var d = self.regs.at(2), e = self.regs.at(3); self.regs.splice(2, 2, self.regs.at(4), self.regs.at(5)); self.regs.splice(4, 2, d, e); return true; }
             if (op === 0xE3) { var lo = memory.load(self.sp), hi = memory.load(self.sp + 1); memory.store(self.sp, self.regs.at(5)); memory.store(self.sp + 1, self.regs.at(4)); setHL((hi << 8) | lo); return true; }
-            if (op === 0xE9) { self.ip = getHL() & 0xFF; return true; }
-            if (op === 0xF9) { self.sp = getHL() & 0xFF; return true; }
+            if (op === 0xE9) { self.ip = getHL() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
+            if (op === 0xF9) { self.sp = getHL() & ((memory.data.length <= 256) ? 0xFF : 0xFFFF); return true; }
             throw "Invalid 8080 opcode: 0x" + op.toString(16).toUpperCase();
         } catch (e) { self.fault = true; throw e; }
     };
@@ -1983,6 +1991,132 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     $scope.cpu8080 = cpu8080;
     $scope.cpuMode = '8bit';
     $scope.showAscii = true;
+    $scope.ramCols = [];
+    for (var rc = 0; rc < 16; rc++) { $scope.ramCols.push(rc); }
+    $scope.ramSizes = [
+        { label: '256B', bytes: 256 },
+        { label: '1K', bytes: 1024 },
+        { label: '2K', bytes: 2048 },
+        { label: '16K', bytes: 16384 },
+        { label: '32K', bytes: 32768 },
+        { label: '64K', bytes: 65536 },
+        { label: '128K', bytes: 131072 },
+        { label: '256K', bytes: 262144 },
+        { label: '1024K', bytes: 1048576 }
+    ];
+    $scope.ramSize = 256;
+    $scope.ramWindowBase = 0;
+    $scope.ramJumpHex = '0000';
+    $scope.ramVisibleRows = [];
+
+    $scope.rebuildRamRows = function () {
+        var totalRows = Math.floor(memory.data.length / 16);
+        var maxVisible = 256;
+        var startRow = Math.floor($scope.ramWindowBase / 16);
+        if (startRow < 0) { startRow = 0; }
+        if (startRow >= totalRows) { startRow = Math.max(0, totalRows - maxVisible); }
+        var count = Math.min(totalRows - startRow, maxVisible);
+        var rows = [];
+        for (var i = 0; i < count; i++) { rows.push(startRow + i); }
+        $scope.ramVisibleRows = rows;
+    };
+
+    $scope.formatRowAddr = function (row) {
+        var addr = row * 16;
+        var digits = memory.data.length > 65536 ? 5 : 4;
+        var h = addr.toString(16).toUpperCase();
+        while (h.length < digits) { h = '0' + h; }
+        return h + ':';
+    };
+
+    $scope.setRamSize = function (bytes) {
+        $scope.stop();
+        $scope.ramSize = bytes;
+        $scope.ramWindowBase = 0;
+        $scope.ramJumpHex = '0000';
+        memory.resize(bytes);
+        $scope.outputStartIndex = (bytes === 256) ? 232 : (bytes - 24);
+        $scope.rebuildRamRows();
+        $scope.reset();
+    };
+
+    $scope.jumpRamAddr = function (hexStr) {
+        var v = parseInt((hexStr || '0').replace(/^0x/i, ''), 16);
+        if (isNaN(v) || v < 0) { v = 0; }
+        if (v >= memory.data.length) { v = memory.data.length - 16; }
+        $scope.ramWindowBase = v & ~0x0F;
+        $scope.rebuildRamRows();
+    };
+
+    $scope.stepRamWindow = function (deltaBytes) {
+        var next = $scope.ramWindowBase + deltaBytes;
+        if (next < 0) { next = 0; }
+        if (next >= memory.data.length) { next = Math.max(0, memory.data.length - 4096); }
+        $scope.ramWindowBase = next & ~0x0F;
+        $scope.rebuildRamRows();
+    };
+
+    $scope.rebuildRamRows();
+    $scope.ramSizes = [
+        { label: '256B', bytes: 256 },
+        { label: '1K', bytes: 1024 },
+        { label: '2K', bytes: 2048 },
+        { label: '16K', bytes: 16384 },
+        { label: '32K', bytes: 32768 },
+        { label: '64K', bytes: 65536 },
+        { label: '128K', bytes: 131072 },
+        { label: '256K', bytes: 262144 },
+        { label: '1024K', bytes: 1048576 }
+    ];
+    $scope.ramSize = 256;
+    $scope.ramPage = 0;
+    $scope.ramCols = [];
+    for (var c = 0; c < 16; c++) { $scope.ramCols.push(c); }
+    $scope.ramVisibleRows = [];
+
+    $scope.rebuildRamView = function () {
+        var totalRows = Math.floor(memory.data.length / 16);
+        var maxPage = Math.max(0, Math.ceil(totalRows / 64) - 1);
+        if ($scope.ramPage > maxPage) { $scope.ramPage = maxPage; }
+        var startRow = $scope.ramPage * 64;
+        var count = Math.min(64, totalRows - startRow);
+        var arr = [];
+        for (var i = 0; i < count; i++) { arr.push(startRow + i); }
+        $scope.ramVisibleRows = arr;
+    };
+
+    $scope.setRamSize = function (bytes) {
+        $scope.stop();
+        $scope.ramSize = bytes;
+        $scope.ramPage = 0;
+        memory.resize(bytes);
+        $scope.reset();
+        if (bytes > 256) {
+            cpu8080.sp = Math.min(bytes, 65536) - 1;
+        }
+        $scope.rebuildRamView();
+    };
+
+    $scope.stepRamPage = function (delta) {
+        var totalRows = Math.floor(memory.data.length / 16);
+        var maxPage = Math.max(0, Math.ceil(totalRows / 64) - 1);
+        $scope.ramPage = Math.max(0, Math.min(maxPage, $scope.ramPage + delta));
+        $scope.rebuildRamView();
+    };
+
+    $scope.ramPageCount = function () {
+        return Math.max(1, Math.ceil(Math.floor(memory.data.length / 16) / 64));
+    };
+
+    $scope.formatRowAddr = function (row) {
+        var addr = row * 16;
+        var digits = (memory.data.length > 65536) ? 5 : ((memory.data.length > 255) ? 4 : 2);
+        var h = addr.toString(16).toUpperCase();
+        while (h.length < digits) { h = '0' + h; }
+        return h + ':';
+    };
+
+    $scope.rebuildRamView();
     $scope.layoutMenuOpen = false;
     $document.on('click', function (e) {
         if ($scope.layoutMenuOpen && !e.target.closest('.dock-dropdown')) {
@@ -2197,7 +2331,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
     };
     $scope.getMemoryTooltip = function (idx) {
         var val = memory.data.at(idx);
-        var ha = ('0' + idx.toString(16).toUpperCase()).slice(-2);
+        var pad = (memory.data.length > 65536) ? 5 : ((memory.data.length > 256) ? 4 : 2); var ha = ('00000' + idx.toString(16).toUpperCase()).slice(-pad);
         var hv = ('0' + val.toString(16).toUpperCase()).slice(-2);
         var tip = 'Addr: 0x' + ha + ' (' + idx + ') | Val: 0x' + hv + ' (' + val + ')';
         if (val >= 32 && val <= 126) { tip += " | Char: '" + String.fromCharCode(val) + "'"; }
@@ -2217,6 +2351,7 @@ app.controller('Ctrl', ['$document', '$scope', '$timeout', '$http', 'opcodes', '
 
         cpu.reset();
         cpu8080.reset();
+        if (memory.data.length > 256) { cpu8080.sp = Math.min(memory.data.length, 65536) - 1; }
         memory.reset();
         $scope.error = '';
         $scope.selectedLine = -1;
