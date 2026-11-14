@@ -1,5 +1,9 @@
 # Simple 8-bit Assembler Simulator
 
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 A browser-based simulator providing a simplified NASM-like assembler syntax for an 8-bit x86-inspired educational CPU. Click **Instruction Set** inside the simulator to view the full opcode and architecture reference.
 
 #### [TRY IT ONLINE](https://robotgibson.github.io/assembler-simulator/)
